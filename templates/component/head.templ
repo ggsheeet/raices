@@ -1,0 +1,15 @@
+package component
+
+templ Head(title string) {
+	<head>
+		<meta charset="utf-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1"/>
+		<title>{ title }</title>
+		<meta name="htmx-config" content={ HTMXConfig }/>
+		<link rel="stylesheet" href="/public/css/reset.css"/>
+		<link rel="stylesheet" href="/public/css/global.css"/>
+		<link rel="stylesheet" href="/public/css/components.css"/>
+		<script type="text/javascript" src="/public/js/htmx.min.js" defer></script>
+		{ children... }
+	</head>
+}

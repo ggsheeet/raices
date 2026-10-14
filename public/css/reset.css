@@ -1,0 +1,54 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  line-height: 1.15;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100%;
+}
+
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+fieldset {
+  padding: 0;
+  border: 0;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+  outline: transparent;
+}
+
+button {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  outline: transparent;
+}
+
+h1,
+h2,
+p {
+  overflow-wrap: break-word;
+}

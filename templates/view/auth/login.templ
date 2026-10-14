@@ -1,0 +1,62 @@
+package auth
+
+import (
+	"raices/helpers"
+	"raices/templates/component"
+)
+
+templ Page(email string, result helpers.FormValidationResult) {
+	{{
+		emailError := helpers.GetFormErrorMessage(result, "email")
+		passwordError := helpers.GetFormErrorMessage(result, "password")
+		generalError := helpers.GetFormErrorMessage(result, "general")
+	}}
+	<!DOCTYPE html>
+	<html lang="en">
+		@component.Head("Sign in") {
+			<script type="text/javascript" src="/public/js/forms.js" defer></script>
+		}
+		<body>
+			<main class="layout_wrapper centered">
+				<section class="main_container">
+					<header class="custom_header">
+						<div>
+							<h1>Sign in</h1>
+							<p class="text_sm">Raices</p>
+						</div>
+					</header>
+					<form id="auth_form" class="form_container" method="post" action="/login" novalidate hx-post="/login" hx-target="#auth_form" hx-swap="innerHTML" hx-indicator="#spinner" hx-disable="#form_submit_btn">
+						<div class="field_section">
+							<div class="field_wrapper single_column">
+								<label for="email">Email</label>
+								<input id="email" name="email" type="email" autocomplete="username" spellcheck="false" aria-describedby="email_error" value={ email }/>
+								<div id="email_error" role="alert" class="helper_message error text_xs">{ helpers.FormErrorText(ctx, emailError) }</div>
+							</div>
+							<div class="field_wrapper single_column">
+								<label for="password">Password</label>
+								<input id="password" name="password" type="password" autocomplete="current-password" aria-describedby="password_error"/>
+								<div id="password_error" role="alert" class="helper_message error text_xs">{ helpers.FormErrorText(ctx, passwordError) }</div>
+							</div>
+						</div>
+						<div id="general_error" role="alert" class="badge_message error text_sm">{ helpers.FormErrorText(ctx, generalError) }</div>
+						<button id="form_submit_btn" class="custom_cta" type="submit">
+							<svg id="spinner" class="htmx-indicator spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-dasharray="28 22"></circle></svg>
+							<span>Continue</span>
+						</button>
+					</form>
+				</section>
+			</main>
+		</body>
+	</html>
+}
+
+templ FormErrors(result helpers.FormValidationResult) {
+	{{
+		emailError := helpers.GetFormErrorMessage(result, "email")
+		passwordError := helpers.GetFormErrorMessage(result, "password")
+		generalError := helpers.GetFormErrorMessage(result, "general")
+	}}
+	<hx-partial hx-target="#email_error">{ helpers.FormErrorText(ctx, emailError) }</hx-partial>
+	<hx-partial hx-target="#password_error">{ helpers.FormErrorText(ctx, passwordError) }</hx-partial>
+	<hx-partial hx-target="#general_error">{ helpers.FormErrorText(ctx, generalError) }</hx-partial>
+}

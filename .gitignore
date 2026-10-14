@@ -1,0 +1,20 @@
+bin/
+tmp/
+*_templ.go
+.env
+.env.*
+!.env.example
+build-errors.log
+.DS_Store
+.cursor/
+.cursorignore
+
+data/
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+database/sqlc/
+
+# docs
+GG_TO_GO.md

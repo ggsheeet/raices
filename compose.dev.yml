@@ -1,0 +1,12 @@
+services:
+  raices:
+    build:
+      context: .
+      target: dev
+    image: raices:dev
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.dev
+    volumes:
+      - ./:/app

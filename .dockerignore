@@ -1,0 +1,7 @@
+.git
+.cursor
+bin
+tmp
+.env
+.env.*
+build-errors.log

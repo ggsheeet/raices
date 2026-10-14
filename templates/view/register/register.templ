@@ -1,0 +1,281 @@
+package register
+
+import (
+	"strconv"
+
+	"raices/env"
+	"raices/helpers"
+	"raices/templates/component"
+)
+
+templ Page(result helpers.FormValidationResult) {
+	@registerView(1, false, result)
+}
+
+templ Checkout(qty int) {
+	@registerView(qty, true, helpers.NewFormValidationResult())
+}
+
+templ QuantityPage(qty int) {
+	@registerView(qty, false, helpers.NewFormValidationResult())
+}
+
+templ registerView(qty int, showPayer bool, result helpers.FormValidationResult) {
+	{{
+		qtyAttr := strconv.Itoa(qty)
+		unitPesos := env.TicketPriceCents / 100
+		unitPesosAttr := strconv.Itoa(unitPesos)
+		linePriceLabel := "Mex$" + strconv.Itoa(qty*unitPesos) + ".00"
+	}}
+	<!DOCTYPE html>
+	<html lang="es">
+		@component.Head("Registro") {
+			<link rel="stylesheet" href="/public/css/register.css"/>
+			<script type="text/javascript" src="/public/js/forms.js" defer></script>
+			<!-- register.js listens for alpine:init and must be listed before Alpine. -->
+			<script type="text/javascript" src="/public/js/register.js" defer></script>
+			<script type="text/javascript" src="/public/js/alpine-csp.min.js" defer></script>
+		}
+		<body>
+			<main class="layout_wrapper register_shell">
+				<section class="register_layout">
+					<header class="custom_header register_header">
+						<h1>Raíces 2026</h1>
+						<p class="text_medtext_sm">INP Emanuel Dios con Nosotros</p>
+						<p class="text_sm">30 oct – 1 nov 2026</p>
+					</header>
+					<div class="register_columns" x-data="ticket" data-qty={ qtyAttr } data-unit-pesos={ unitPesosAttr }>
+						if showPayer {
+							@PayerForm(qty)
+						} else {
+							@TicketCard(qty)
+						}
+						<aside class="order_summary" aria-label="Resumen del pedido">
+							<div class="order_banner">
+								<p class="order_banner_kicker text_xs">INP Emanuel Dios con Nosotros</p>
+								<div class="order_banner_footer">
+									<p class="order_banner_title">Del Pulpito al Hogar</p>
+									<p class="order_banner_date text_xs">30 oct – 1 nov 2026</p>
+								</div>
+							</div>
+							<div class="order_body">
+								<h2 class="order_title">Resumen del pedido</h2>
+								<div class="order_rows">
+									<div class="order_row text_sm">
+										<span x-text="lineQty">1 x Admisión general</span>
+										<span x-text="lineTotal">{ linePriceLabel }</span>
+									</div>
+								</div>
+								<div class="order_rows">
+									<div class="order_row text_sm">
+										<span>Subtotal</span>
+										<span x-text="subtotal">{ linePriceLabel }</span>
+									</div>
+									<div class="order_row order_total">
+										<span>Total</span>
+										<span x-text="total">{ linePriceLabel }</span>
+									</div>
+								</div>
+								<div class="order_policy">
+									<svg viewBox="0 0 24 24" aria-hidden="true">
+										<rect x="5" y="3" width="14" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"></rect>
+										<path d="M8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+									</svg>
+									<div>
+										<p class="text_sm text_semi">Política de reembolso</p>
+										<p class="text_xs">No se hacen reembolsos.</p>
+									</div>
+								</div>
+								<div id="quantity_action">
+									if showPayer {
+										@PayForm()
+									} else {
+										@QuantityForm(qty, result)
+									}
+								</div>
+							</div>
+						</aside>
+					</div>
+				</section>
+			</main>
+			<script src="https://sdk.mercadopago.com/js/v2"></script>
+			<script src="/public/js/mp-card.js" data-mp-key={ env.MPPublicKey }></script>
+		</body>
+	</html>
+}
+
+templ PayerStep(qty int) {
+	@PayerForm(qty)
+	<hx-partial hx-target="#quantity_action">
+		@PayForm()
+	</hx-partial>
+}
+
+templ QuantityStep(qty int) {
+	@TicketCard(qty)
+	<hx-partial hx-target="#quantity_action">
+		@QuantityForm(qty, helpers.NewFormValidationResult())
+	</hx-partial>
+}
+
+templ TicketCard(qty int) {
+	<article class="ticket_card">
+		<div class="ticket_top">
+			<h2 class="ticket_name">Admisión general</h2>
+			<div class="qty_stepper" role="group" aria-label="Cantidad de boletos">
+				<button type="button" class="qty_btn" x-on:click="decrement" x-bind:disabled="atMin" aria-label="Quitar uno">−</button>
+				<span class="qty_value" x-text="qty" aria-live="polite">{ strconv.Itoa(qty) }</span>
+				<button type="button" class="qty_btn" x-on:click="increment" x-bind:disabled="atMax" aria-label="Agregar uno">+</button>
+			</div>
+		</div>
+		<div class="ticket_body">
+			<p>
+				<span class="ticket_price">{ "Mex$" + strconv.Itoa(env.TicketPriceCents/100) + ".00" }</span>
+			</p>
+			<p class="text_sm">Las compras cierran al final del 30 de octubre.</p>
+			<div class="ticket_description text_sm">
+				<span>
+					Tu registro incluye: acceso a todas las conferencias, tiempos de alabanza, sesión de preguntas y respuestas, y material de trabajo. (Nota: no incluye alimentos). 
+					<br><br>
+					Cupo limitado, reserva tu lugar completando el registro.
+				</span>
+			</div>
+			<div class="ticket_speakers">
+				<p class="speaker_hint text_xs">Haz clic en un conferencista para ver su biografía</p>
+				<div class="speaker_row">
+					<button type="button" class="speaker_btn" x-on:click="showSpeaker('eduardo')" x-bind:class="speaker === 'eduardo' ? 'is_selected' : ''" x-bind:aria-expanded="speaker === 'eduardo' ? 'true' : 'false'" aria-controls="bio_eduardo">
+						<img class="speaker_avatar" src="/public/img/speaker-1.jpeg" alt=""/>
+						<span class="speaker_name">Eduardo Izquierdo</span>
+					</button>
+					<button type="button" class="speaker_btn" x-on:click="showSpeaker('nathan')" x-bind:class="speaker === 'nathan' ? 'is_selected' : ''" x-bind:aria-expanded="speaker === 'nathan' ? 'true' : 'false'" aria-controls="bio_nathan">
+						<img class="speaker_avatar" src="/public/img/speaker-2.jpeg" alt=""/>
+						<span class="speaker_name">Nathan Díaz</span>
+					</button>
+				</div>
+				<div id="bio_eduardo" class="speaker_bio text_sm" x-bind:class="speaker === 'eduardo' ? 'is_open' : ''">
+					Originario de Monterrey, México, con Maestría en Divinidad y Teología en The Master’s Seminary (California). Sirvió en el ministerio hispano de Grace Community Church y en 2022 regresó a Monterrey para pastorear y plantar la Iglesia Bíblica de Monterrey.
+					<br/><br/>
+					Está casado con Valeria y es padre de Gabriel, Marian y Mariel. Colabora con Coalición por el Evangelio y el proyecto Más Como Jesús.
+				</div>
+				<div id="bio_nathan" class="speaker_bio text_sm" x-bind:class="speaker === 'nathan' ? 'is_open' : ''">
+					Nathan Díaz es pastor de enseñanza en la Iglesia Evangélica Cuajimalpa en la ciudad de México y productor del programa de radio “Clasificación A” que se transmite en emisoras del mundo hispano. También es colaborador de artículos y libros con Coalición por el Evangelio, colaborador en la Biblia Temática de estudio Holman y autor de "Escatología Práctica", "Si Dios es bueno, ¿Por qué existe el mal?" e "Hijos de Consolación".
+					<br/><br/>
+					Estudió Biblia y teología en el Instituto Bíblico Moody de Chicago y es maestro de escatología y apologética en la escuela de estudios bíblicos y teológicos Semper Reformanda.
+					<br/><br/>
+					Él y su esposa Cristin tienen tres hijos, Ian, Cael y Evan.
+				</div>
+				<button class="text_link text_sm speaker_close" type="button" x-on:click="closeSpeaker" x-bind:class="speaker !== '' ? 'is_open' : ''">Ocultar</button>
+			</div>
+		</div>
+	</article>
+}
+
+templ QuantityForm(qty int, result helpers.FormValidationResult) {
+	{{ qtyError := helpers.GetFormErrorMessage(result, "qty") }}
+	<form
+		id="ticket_quantity_form"
+		class="form_container slim"
+		method="post"
+		action="/register/amount"
+		hx-post="/register/amount"
+		hx-target=".ticket_card"
+		hx-swap="outerHTML"
+		hx-indicator="#spinner"
+		hx-disable="#form_submit_btn"
+	>
+		<input type="hidden" name="qty" value={ strconv.Itoa(qty) } x-model.number="qty" id="form_qty_input"/>
+		<div id="qty_error" role="alert" class="badge_message error text_sm">{ helpers.FormErrorText(ctx, qtyError) }</div>
+		<button type="submit" class="custom_cta" id="form_submit_btn" aria-describedby="qty_error">
+			<svg id="spinner" class="htmx-indicator spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-dasharray="28 22"></circle></svg>
+			<span>Continuar con el pago</span>
+		</button>
+	</form>
+}
+
+templ PayForm() {
+	<form
+		id="pay_form"
+		class="form_container slim"
+		method="post"
+		action="/register/pay"
+		hx-post="/register/pay"
+		hx-include="#payer_form"
+		hx-target="#payer_form"
+		hx-swap="none"
+		hx-indicator="#spinner"
+		hx-disable="#form_submit_btn"
+		hx-confirm="true"
+	>
+		<input type="hidden" name="token" value=""/>
+		<button type="submit" class="custom_cta" id="form_submit_btn">
+			<svg id="spinner" class="htmx-indicator spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-dasharray="28 22"></circle></svg>
+			<img class="mp_logo" src="/public/img/mp.svg" alt=""/>
+			<span>Pagar</span>
+		</button>
+	</form>
+}
+
+templ PayerForm(qty int) {
+	<form id="payer_form" class="form_container" autocomplete="on">
+		<a
+			class="text_link text_sm"
+			href={ templ.URL("/register/quantity?qty=" + strconv.Itoa(qty)) }
+			hx-get={ "/register/quantity?qty=" + strconv.Itoa(qty) }
+			hx-target="#payer_form"
+			hx-swap="outerHTML"
+		>Cambiar cantidad</a>
+		<input type="hidden" name="qty" value={ strconv.Itoa(qty) }/>
+		<fieldset class="field_section">
+			<legend>Datos del comprador</legend>
+			<div class="field_wrapper">
+				<label for="given_name">Nombre</label>
+				<input id="given_name" name="given_name" type="text" autocomplete="given-name" required/>
+			</div>
+			<div class="field_wrapper">
+				<label for="family_name">Apellido</label>
+				<input id="family_name" name="family_name" type="text" autocomplete="family-name" required/>
+			</div>
+			<div class="field_wrapper">
+				<label for="payer_email">Correo electrónico</label>
+				<input id="payer_email" name="email" type="email" autocomplete="email" spellcheck="false" required/>
+			</div>
+			<div class="field_wrapper">
+				<label for="email_confirm">Confirmar correo</label>
+				<input id="email_confirm" name="email_confirm" type="email" autocomplete="off" spellcheck="false" required/>
+			</div>
+			<div class="field_wrapper">
+				<label for="age">Edad</label>
+				<input id="age" name="age" type="number" inputmode="numeric" min="1" max="120" step="1" required/>
+			</div>
+			<div class="field_wrapper">
+				<label for="church">Iglesia a la que asistes (opcional)</label>
+				<input id="church" name="church" type="text" autocomplete="organization"/>
+			</div>
+		</fieldset>
+		<hr class="form_divider">
+		<fieldset class="field_section">
+			<legend>Tarjeta</legend>
+			<div class="field_wrapper single_column">
+				<label for="cardNumber">Número de tarjeta</label>
+				<div id="cardNumber" class="secure_field"></div>
+			</div>
+			<div class="field_wrapper">
+				<label for="expirationDate">Vencimiento</label>
+				<div id="expirationDate" class="secure_field"></div>
+			</div>
+			<div class="field_wrapper">
+				<label for="securityCode">Código de seguridad</label>
+				<div id="securityCode" class="secure_field"></div>
+			</div>
+			<div class="field_wrapper single_column">
+				<label for="card_name">Nombre en la tarjeta</label>
+				<input id="card_name" type="text" autocomplete="cc-name" required/>
+			</div>
+		</fieldset>
+	</form>
+}
+
+templ AmountErrors(result helpers.FormValidationResult) {
+	{{ qtyError := helpers.GetFormErrorMessage(result, "qty") }}
+	<hx-partial hx-target="#qty_error">{ helpers.FormErrorText(ctx, qtyError) }</hx-partial>
+}

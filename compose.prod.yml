@@ -1,0 +1,15 @@
+services:
+  raices:
+    build:
+      context: .
+      target: production
+    image: raices:prod
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.prod
+    volumes:
+      - raices_sqlite:/data
+
+volumes:
+  raices_sqlite:
