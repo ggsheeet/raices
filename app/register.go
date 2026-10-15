@@ -48,14 +48,20 @@ func handleRegisterAmount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	checkoutKey, err := newSecret()
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
 	if helpers.IsHTMX(r) {
-		if err := helpers.RenderComponent(w, r, register.PayerStep(qty), nil); err != nil {
+		if err := helpers.RenderComponent(w, r, register.PayerStep(qty, checkoutKey), nil); err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
 		return
 	}
 
-	if err := helpers.RenderPage(w, r, register.Checkout(qty)); err != nil {
+	if err := helpers.RenderPage(w, r, register.Checkout(qty, checkoutKey)); err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
 }

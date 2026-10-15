@@ -1,0 +1,96 @@
+package claim
+
+import (
+	"strconv"
+
+	"raices/templates/component"
+)
+
+templ NotFound() {
+	<!DOCTYPE html>
+	<html lang="es">
+		@component.Head("Boleto") {
+			<link rel="stylesheet" href="/public/css/notice.css"/>
+		}
+		<body>
+			<main class="layout_wrapper centered notice_shell">
+				<section class="notice" aria-labelledby="notice_title">
+					<header class="notice_banner">
+						<p class="notice_kicker">Raíces 2026</p>
+						<h1 id="notice_title">No encontramos ese boleto.</h1>
+						<p>30 oct – 1 nov 2026</p>
+					</header>
+					<div class="notice_body">
+						<p class="notice_detail text_sm">Ese código no corresponde a un boleto emitido. Pide el código que llegó por correo.</p>
+					</div>
+				</section>
+			</main>
+		</body>
+	</html>
+}
+
+templ Ticket(view TicketView) {
+	{{
+		banner := "notice_banner"
+		mark := "notice_mark"
+		title := "Boleto admitido"
+		lead := "Listo para entrar"
+		whenLabel := "Hora de registro"
+		if !view.Fresh {
+			banner = "notice_banner is_used"
+			mark = "notice_mark is_used"
+			title = "Este boleto ya fue usado"
+			lead = "Ya se registró en la puerta"
+			whenLabel = "Registrado"
+		}
+	}}
+	<!DOCTYPE html>
+	<html lang="es">
+		@component.Head("Boleto") {
+			<link rel="stylesheet" href="/public/css/notice.css"/>
+		}
+		<body>
+			<main class="layout_wrapper centered notice_shell">
+				<section class="notice" aria-labelledby="notice_title">
+					<header class={ banner }>
+						<p class="notice_kicker">Raíces 2026</p>
+						<h1 id="notice_title">{ title }</h1>
+						<p>Del Pulpito al Hogar</p>
+					</header>
+					<div class="notice_body">
+						<div class={ mark } aria-hidden="true">
+							if view.Fresh {
+								<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M7 12.5l3.2 3.2L17 8.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+							} else {
+								<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M12 7v6.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path><circle cx="12" cy="16.8" r="0.9" fill="currentColor"></circle></svg>
+							}
+						</div>
+						<p class="notice_lead">{ lead }</p>
+						<p class="notice_name">{ view.Name }</p>
+						if view.Index > 0 {
+							<p class="notice_ticket text_sm">Boleto { strconv.Itoa(view.Index) }</p>
+						}
+						<dl class="notice_facts">
+							<div>
+								<dt>Lugar</dt>
+								<dd>INP Emanuel Dios con Nosotros</dd>
+							</div>
+							<div>
+								<dt>Dirección</dt>
+								<dd>Av Insurgentes 450, San Jerónimo, 64630 Monterrey, N.L.</dd>
+							</div>
+							<div>
+								<dt>Fechas</dt>
+								<dd>30 oct – 1 nov 2026</dd>
+							</div>
+							<div>
+								<dt>{ whenLabel }</dt>
+								<dd>{ view.UsedAt }</dd>
+							</div>
+						</dl>
+					</div>
+				</section>
+			</main>
+		</body>
+	</html>
+}

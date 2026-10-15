@@ -1,0 +1,56 @@
+package register
+
+import "raices/templates/component"
+
+templ Confirmed(view Receipt) {
+	<!DOCTYPE html>
+	<html lang="es">
+		@component.Head(view.Title) {
+			<link rel="stylesheet" href="/public/css/notice.css"/>
+			if view.OK {
+				<script type="text/javascript" src="/public/js/close-page.js" defer></script>
+			}
+		}
+		<body>
+			<main class="layout_wrapper centered notice_shell">
+				<section class="notice" aria-labelledby="notice_title">
+					<header class="notice_banner">
+						<p class="notice_kicker">Raíces 2026</p>
+						<h1 id="notice_title">{ view.Title }</h1>
+						<p>Del Pulpito al Hogar</p>
+					</header>
+					<div class="notice_body">
+						if view.OK {
+							<div class="notice_mark" aria-hidden="true">
+								<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M7 12.5l3.2 3.2L17 8.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+							</div>
+						}
+						if view.Lead != "" {
+							<p class="notice_lead">{ view.Lead }</p>
+						}
+						if view.Detail != "" {
+							<p class="notice_detail text_sm">{ view.Detail }</p>
+						}
+						if len(view.Facts) > 0 {
+							<dl class="notice_facts">
+								for _, fact := range view.Facts {
+									<div>
+										<dt>{ fact.Label }</dt>
+										<dd>{ fact.Value }</dd>
+									</div>
+								}
+							</dl>
+						}
+						<div class="notice_actions">
+							<a class="custom_cta" href="/register">Volver al registro</a>
+							if view.OK {
+								<button type="button" class="notice_close" data-close-page>Cerrar página</button>
+								<p id="close_hint" class="notice_hint text_xs" hidden>Si la página sigue abierta, ciérrala desde el navegador.</p>
+							}
+						</div>
+					</div>
+				</section>
+			</main>
+		</body>
+	</html>
+}

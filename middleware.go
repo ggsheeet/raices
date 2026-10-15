@@ -52,7 +52,11 @@ func requestLog(next http.Handler) http.Handler {
 		if status == 0 {
 			status = http.StatusOK
 		}
-		logger.Info("%s %s %d %s", r.Method, r.URL.Path, status, time.Since(start))
+		path := r.URL.Path
+		if strings.HasPrefix(path, "/tickets/claim/") {
+			path = "/tickets/claim/"
+		}
+		logger.Info("%s %s %d %s", r.Method, path, status, time.Since(start))
 	})
 }
 
@@ -82,7 +86,7 @@ func (s *statusWriter) Unwrap() http.ResponseWriter {
 
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' https://sdk.mercadopago.com; style-src 'self'; img-src 'self' data: https://http2.mlstatic.com; font-src 'self'; connect-src 'self' https://api.mercadopago.com https://sdk.mercadopago.com; frame-src https://*.mercadopago.com; form-action 'self'; base-uri 'self'; frame-ancestors 'none'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' https://sdk.mercadopago.com; style-src 'self'; img-src 'self' data: https://http2.mlstatic.com; font-src 'self'; connect-src 'self' https://api.mercadopago.com https://secure-fields.mercadopago.com https://api-static.mercadopago.com; frame-src https://secure-fields.mercadopago.com https://api-static.mercadopago.com; form-action 'self'; base-uri 'self'; frame-ancestors 'none'")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")

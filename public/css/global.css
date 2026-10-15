@@ -65,6 +65,10 @@ body {
 a {
   color: var(--clr-accent);
   text-underline-offset: 0.18em;
+  
+  &.primary {
+    color: var(--clr-primary);
+  }
 }
 
 .text_med { font-weight: 500; }

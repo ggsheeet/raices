@@ -6,6 +6,8 @@ require (
 	github.com/a-h/templ v0.3.1070
 	github.com/joho/godotenv v1.5.1
 	github.com/mercadopago/sdk-go v1.14.0
+	github.com/resend/resend-go/v2 v2.28.0
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	modernc.org/sqlite v1.57.0
 )
 

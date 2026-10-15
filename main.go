@@ -13,6 +13,7 @@ import (
 	"raices/app"
 	"raices/database"
 	"raices/env"
+	"raices/mail"
 	"raices/payment"
 )
 
@@ -43,9 +44,12 @@ func main() {
 
 	mux := http.NewServeMux()
 	appDeps := app.Dependencies{
-		Mux:    mux,
-		MP:     mp,
-		Logger: logger,
+		Mux:     mux,
+		MP:      mp,
+		DB:      db,
+		Logger:  logger,
+		Charger: payment.NewCharger(mp),
+		Sender:  mail.New(db, env.ResendAPIKey),
 	}
 	app.Routes(appDeps)
 

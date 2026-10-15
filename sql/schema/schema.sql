@@ -16,6 +16,8 @@ CREATE TABLE orders (
   reserved_until TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  poll_token TEXT NOT NULL,
+  checkout_key TEXT NOT NULL,
   CHECK (status IN ('pending_payment', 'paid', 'rejected', 'expired')),
   CHECK (fulfillment_status IN ('pending', 'fulfilled', 'unfulfilled')),
   CHECK (email_status IN ('not_sent', 'sent', 'failed')),
@@ -32,6 +34,9 @@ CREATE TABLE tickets (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   CHECK (status IN ('reserved', 'issued', 'used'))
 );
+
+CREATE UNIQUE INDEX orders_poll_token_uidx ON orders(poll_token) WHERE poll_token <> '';
+CREATE UNIQUE INDEX orders_checkout_key_uidx ON orders(checkout_key) WHERE checkout_key <> '';
 
 CREATE INDEX tickets_order_id_idx ON tickets(order_id);
 

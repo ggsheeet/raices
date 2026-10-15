@@ -1,0 +1,70 @@
+package admin
+
+import "raices/templates/component"
+
+templ Page(view PageView) {
+	<!DOCTYPE html>
+	<html lang="es">
+		@component.Head("Admin") {
+		}
+		<body>
+			<main class="layout_wrapper">
+				<section class="admin_shell">
+					<header class="custom_header has_action">
+						<div>
+							if view.All {
+								<h1>Todos los pedidos</h1>
+							} else {
+								<h1>Atención</h1>
+							}
+						</div>
+						<nav class="text_sm">
+							<a href="/admin">Atención</a>
+							<a href="/admin?filter=all">Todos</a>
+						</nav>
+					</header>
+					<div class="admin_table_wrap">
+						<table class="admin_orders">
+							<thead>
+								<tr>
+									<th>Nombre</th>
+									<th>Correo</th>
+									<th>Cantidad</th>
+									<th>Monto</th>
+									<th>Estado</th>
+									<th>Mercado Pago</th>
+									<th>external_reference</th>
+									<th></th>
+								</tr>
+							</thead>
+							<tbody>
+								for _, order := range view.Orders {
+									<tr>
+										<td>{ buyerName(order) }</td>
+										<td>{ order.Email }</td>
+										<td>{ orderIDLabel(order.Quantity) }</td>
+										<td>{ amountLabel(order.TotalCents) }</td>
+										<td>{ order.Status }</td>
+										<td>{ mpOrderID(order) }</td>
+										<td>{ orderIDLabel(order.ID) }</td>
+										<td>
+											if emailError(order) != "" {
+												<p class="text_xs">{ emailError(order) }</p>
+											}
+											if order.EmailStatus == "failed" {
+												<form method="post" action="/admin/resend">
+													<input type="hidden" name="order_id" value={ orderIDLabel(order.ID) }/>
+													<button type="submit">Reenviar</button>
+												</form>
+											}
+										</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				</section>
+			</main>
+		</body>
+	</html>
+}

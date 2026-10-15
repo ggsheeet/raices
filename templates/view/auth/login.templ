@@ -5,7 +5,7 @@ import (
 	"raices/templates/component"
 )
 
-templ Page(email string, result helpers.FormValidationResult) {
+templ Page(email, next string, result helpers.FormValidationResult) {
 	{{
 		emailError := helpers.GetFormErrorMessage(result, "email")
 		passwordError := helpers.GetFormErrorMessage(result, "password")
@@ -26,6 +26,7 @@ templ Page(email string, result helpers.FormValidationResult) {
 						</div>
 					</header>
 					<form id="auth_form" class="form_container" method="post" action="/login" novalidate hx-post="/login" hx-target="#auth_form" hx-swap="innerHTML" hx-indicator="#spinner" hx-disable="#form_submit_btn">
+						<input type="hidden" name="next" value={ next }/>
 						<div class="field_section">
 							<div class="field_wrapper single_column">
 								<label for="email">Email</label>

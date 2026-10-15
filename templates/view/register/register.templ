@@ -9,18 +9,18 @@ import (
 )
 
 templ Page(result helpers.FormValidationResult) {
-	@registerView(1, false, result)
+	@registerView(1, false, result, "")
 }
 
-templ Checkout(qty int) {
-	@registerView(qty, true, helpers.NewFormValidationResult())
+templ Checkout(qty int, checkoutKey string) {
+	@registerView(qty, true, helpers.NewFormValidationResult(), checkoutKey)
 }
 
 templ QuantityPage(qty int) {
-	@registerView(qty, false, helpers.NewFormValidationResult())
+	@registerView(qty, false, helpers.NewFormValidationResult(), "")
 }
 
-templ registerView(qty int, showPayer bool, result helpers.FormValidationResult) {
+templ registerView(qty int, showPayer bool, result helpers.FormValidationResult, checkoutKey string) {
 	{{
 		qtyAttr := strconv.Itoa(qty)
 		unitPesos := env.TicketPriceCents / 100
@@ -83,12 +83,12 @@ templ registerView(qty int, showPayer bool, result helpers.FormValidationResult)
 									</svg>
 									<div>
 										<p class="text_sm text_semi">Política de reembolso</p>
-										<p class="text_xs">No se hacen reembolsos.</p>
+										<p class="text_xs">Solicitar al correo <a href="mailto:info@conferenciaraices.lat" class="primary">info@conferenciaraices.lat</a></p>
 									</div>
 								</div>
 								<div id="quantity_action">
 									if showPayer {
-										@PayForm()
+										@CheckoutPanel(PayView(checkoutKey, ""))
 									} else {
 										@QuantityForm(qty, result)
 									}
@@ -104,10 +104,10 @@ templ registerView(qty int, showPayer bool, result helpers.FormValidationResult)
 	</html>
 }
 
-templ PayerStep(qty int) {
+templ PayerStep(qty int, checkoutKey string) {
 	@PayerForm(qty)
 	<hx-partial hx-target="#quantity_action">
-		@PayForm()
+		@CheckoutPanel(PayView(checkoutKey, ""))
 	</hx-partial>
 }
 
@@ -138,6 +138,8 @@ templ TicketCard(qty int) {
 					Tu registro incluye: acceso a todas las conferencias, tiempos de alabanza, sesión de preguntas y respuestas, y material de trabajo. (Nota: no incluye alimentos). 
 					<br><br>
 					Cupo limitado, reserva tu lugar completando el registro.
+					<br><br>
+					Lugar: INP Emanuel Dios con Nosotros, Av Insurgentes 450, San Jerónimo, 64630 Monterrey, N.L.
 				</span>
 			</div>
 			<div class="ticket_speakers">
@@ -192,7 +194,43 @@ templ QuantityForm(qty int, result helpers.FormValidationResult) {
 	</form>
 }
 
-templ PayForm() {
+templ CheckoutPanel(view PanelView) {
+	if view.PollPath != "" {
+		<div
+			id="checkout_panel"
+			hx-get={ view.PollPath }
+			hx-trigger="every 3s"
+			hx-target="#checkout_panel"
+			hx-swap="outerHTML"
+		>
+			@checkoutPanelInner(view)
+		</div>
+	} else {
+		<div id="checkout_panel">
+			@checkoutPanelInner(view)
+		</div>
+	}
+}
+
+templ checkoutPanelInner(view PanelView) {
+	if view.Pay {
+		@PayForm(view.CheckoutKey, view.Error)
+	} else {
+		<div class="badge_message text_sm">
+			<p>{ view.Message }</p>
+			if view.IFrameURL != "" {
+				<iframe class="mp_challenge" src={ templ.URL(view.IFrameURL) } title="Verificación del banco"></iframe>
+			}
+			if view.LinkURL != "" {
+				<p>
+					<a href={ templ.URL(view.LinkURL) } target="_top">Continuar la verificación del banco</a>
+				</p>
+			}
+		</div>
+	}
+}
+
+templ PayForm(checkoutKey string, errMsg string) {
 	<form
 		id="pay_form"
 		class="form_container slim"
@@ -200,13 +238,16 @@ templ PayForm() {
 		action="/register/pay"
 		hx-post="/register/pay"
 		hx-include="#payer_form"
-		hx-target="#payer_form"
-		hx-swap="none"
+		hx-target="#checkout_panel"
+		hx-swap="outerHTML"
 		hx-indicator="#spinner"
 		hx-disable="#form_submit_btn"
 		hx-confirm="true"
 	>
 		<input type="hidden" name="token" value=""/>
+		<input type="hidden" name="checkout_key" value={ checkoutKey }/>
+		<input type="hidden" name="payment_method_id" value=""/>
+		<div id="pay_error" role="alert" class="badge_message error text_sm">{ errMsg }</div>
 		<button type="submit" class="custom_cta" id="form_submit_btn">
 			<svg id="spinner" class="htmx-indicator spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-dasharray="28 22"></circle></svg>
 			<img class="mp_logo" src="/public/img/mp.svg" alt=""/>
@@ -229,27 +270,27 @@ templ PayerForm(qty int) {
 			<legend>Datos del comprador</legend>
 			<div class="field_wrapper">
 				<label for="given_name">Nombre</label>
-				<input id="given_name" name="given_name" type="text" autocomplete="given-name" required/>
+				<input id="given_name" name="given_name" type="text" autocomplete="given-name" placeholder="María" required/>
 			</div>
 			<div class="field_wrapper">
 				<label for="family_name">Apellido</label>
-				<input id="family_name" name="family_name" type="text" autocomplete="family-name" required/>
+				<input id="family_name" name="family_name" type="text" autocomplete="family-name" placeholder="García" required/>
 			</div>
 			<div class="field_wrapper">
 				<label for="payer_email">Correo electrónico</label>
-				<input id="payer_email" name="email" type="email" autocomplete="email" spellcheck="false" required/>
+				<input id="payer_email" name="email" type="email" autocomplete="email" spellcheck="false" placeholder="nombre@correo.com" required/>
 			</div>
 			<div class="field_wrapper">
 				<label for="email_confirm">Confirmar correo</label>
-				<input id="email_confirm" name="email_confirm" type="email" autocomplete="off" spellcheck="false" required/>
+				<input id="email_confirm" name="email_confirm" type="email" autocomplete="off" spellcheck="false" placeholder="nombre@correo.com" required/>
 			</div>
 			<div class="field_wrapper">
 				<label for="age">Edad</label>
-				<input id="age" name="age" type="number" inputmode="numeric" min="1" max="120" step="1" required/>
+				<input id="age" name="age" type="number" inputmode="numeric" min="1" max="120" step="1" placeholder="30" required/>
 			</div>
 			<div class="field_wrapper">
 				<label for="church">Iglesia a la que asistes (opcional)</label>
-				<input id="church" name="church" type="text" autocomplete="organization"/>
+				<input id="church" name="church" type="text" autocomplete="organization" placeholder="Nombre de tu iglesia"/>
 			</div>
 		</fieldset>
 		<hr class="form_divider">
@@ -269,7 +310,7 @@ templ PayerForm(qty int) {
 			</div>
 			<div class="field_wrapper single_column">
 				<label for="card_name">Nombre en la tarjeta</label>
-				<input id="card_name" type="text" autocomplete="cc-name" required/>
+				<input id="card_name" type="text" autocomplete="cc-name" placeholder="María García" required/>
 			</div>
 		</fieldset>
 	</form>

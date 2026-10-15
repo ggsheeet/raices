@@ -302,9 +302,18 @@
   flex-shrink: 0;
 }
 
+.mp_challenge {
+  display: block;
+  width: 100%;
+  min-height: 22rem;
+  margin-top: 0.75rem;
+  border: 0;
+}
+
 .secure_field {
   width: 100%;
   height: var(--input-field-height);
+  padding-inline: 0.75rem;
   background: var(--clr-surface);
   border: var(--bw-thin) solid var(--clr-border);
   border-radius: var(--br-sm);
