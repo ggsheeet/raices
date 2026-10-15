@@ -6,6 +6,7 @@ templ Confirmed(view Receipt) {
 	<!DOCTYPE html>
 	<html lang="es">
 		@component.Head(view.Title) {
+			@component.OGImage()
 			<link rel="stylesheet" href="/public/css/notice.css"/>
 			if view.OK {
 				<script type="text/javascript" src="/public/js/close-page.js" defer></script>

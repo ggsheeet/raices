@@ -1,6 +1,6 @@
 (function () {
-  var mounted = false;
   var mp = null;
+  var fields = null;
   var tokenizing = false;
 
   function publicKey() {
@@ -34,23 +34,60 @@
     }
   }
 
-  function mountFields() {
-    if (mounted) {
+  function secureHosts() {
+    return {
+      cardNumber: document.getElementById("cardNumber"),
+      expirationDate: document.getElementById("expirationDate"),
+      securityCode: document.getElementById("securityCode"),
+    };
+  }
+
+  function hostsReady(hosts) {
+    return !!(hosts.cardNumber && hosts.expirationDate && hosts.securityCode);
+  }
+
+  function hostsMounted(hosts) {
+    return !!(
+      hosts.cardNumber.querySelector("iframe") &&
+      hosts.expirationDate.querySelector("iframe") &&
+      hosts.securityCode.querySelector("iframe")
+    );
+  }
+
+  function unmountField(field) {
+    if (!field || typeof field.unmount !== "function") {
       return;
     }
-    if (
-      !document.getElementById("cardNumber") ||
-      !document.getElementById("expirationDate") ||
-      !document.getElementById("securityCode")
-    ) {
+    try {
+      field.unmount();
+    } catch (err) {}
+  }
+
+  function unmountFields() {
+    if (!fields) {
       return;
     }
-    var sdk = client();
-    if (!sdk) {
-      return;
+    unmountField(fields.cardNumber);
+    unmountField(fields.expirationDate);
+    unmountField(fields.securityCode);
+  }
+
+  function swapRemovesSecureFields(event) {
+    var tasks = event.detail && event.detail.tasks;
+    if (!tasks) {
+      return false;
     }
+    for (var i = 0; i < tasks.length; i++) {
+      var target = tasks[i] && tasks[i].target;
+      if (target && typeof target.querySelector === "function" && target.querySelector("#cardNumber")) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function createFields(sdk) {
     var cardNumber = sdk.fields.create("cardNumber", { placeholder: "Número de tarjeta" });
-    cardNumber.mount("cardNumber");
     if (typeof cardNumber.on === "function") {
       cardNumber.on("binChange", function (data) {
         var bin = data && data.bin;
@@ -72,9 +109,30 @@
           });
       });
     }
-    sdk.fields.create("expirationDate", { placeholder: "MM/AA" }).mount("expirationDate");
-    sdk.fields.create("securityCode", { placeholder: "Código de seguridad" }).mount("securityCode");
-    mounted = true;
+    fields = {
+      cardNumber: cardNumber,
+      expirationDate: sdk.fields.create("expirationDate", { placeholder: "MM/AA" }),
+      securityCode: sdk.fields.create("securityCode", { placeholder: "Código de seguridad" }),
+    };
+  }
+
+  function mountFields() {
+    var hosts = secureHosts();
+    if (!hostsReady(hosts) || hostsMounted(hosts)) {
+      return;
+    }
+    var sdk = client();
+    if (!sdk) {
+      return;
+    }
+    if (!fields) {
+      createFields(sdk);
+    } else {
+      unmountFields();
+    }
+    fields.cardNumber.mount("cardNumber");
+    fields.expirationDate.mount("expirationDate");
+    fields.securityCode.mount("securityCode");
   }
 
   function tokenInput(form) {
@@ -138,6 +196,16 @@
     }
   });
 
+  document.addEventListener("htmx:beforeSwap", function (event) {
+    if (swapRemovesSecureFields(event)) {
+      unmountFields();
+    }
+  });
+  document.addEventListener("htmx:before:swap", function (event) {
+    if (swapRemovesSecureFields(event)) {
+      unmountFields();
+    }
+  });
   document.addEventListener("DOMContentLoaded", mountFields);
   document.addEventListener("htmx:afterSwap", mountFields);
   document.addEventListener("htmx:after:swap", mountFields);

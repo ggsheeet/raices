@@ -14,6 +14,7 @@ templ Page(email, next string, result helpers.FormValidationResult) {
 	<!DOCTYPE html>
 	<html lang="en">
 		@component.Head("Sign in") {
+			@component.OGImage()
 			<script type="text/javascript" src="/public/js/forms.js" defer></script>
 		}
 		<body>

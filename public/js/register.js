@@ -5,6 +5,32 @@ function money(amount) {
   });
 }
 
+var focusGivenName = false;
+
+document.addEventListener("htmx:after:settle", function (event) {
+  if (!event.target || event.target.id !== "payer_form") {
+    return;
+  }
+  focusGivenName = true;
+  var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  event.target.scrollIntoView({
+    block: "start",
+    behavior: reduceMotion ? "auto" : "smooth",
+  });
+});
+
+document.addEventListener("htmx:after:swap", function () {
+  if (!focusGivenName) {
+    return;
+  }
+  focusGivenName = false;
+  var input = document.getElementById("given_name");
+  if (!input) {
+    return;
+  }
+  input.focus({ preventScroll: true });
+});
+
 document.addEventListener("alpine:init", function () {
   Alpine.data("ticket", function () {
     return {

@@ -64,6 +64,23 @@
   &.slim {
     padding: 0;
   }
+
+  &.mp {
+    background-color: var(--clr-micro);
+    border-color: var(--clr-primary);
+    padding: 0.5rem;
+
+    p {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+
+      svg {
+        width: 1.5rem;
+        height: 1.5rem;
+      }
+    }
+  }
 }
 
 .form_divider {
