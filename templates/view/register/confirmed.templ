@@ -43,7 +43,7 @@ templ Confirmed(view Receipt) {
 							</dl>
 						}
 						<div class="notice_actions">
-							<a class="custom_cta" href="/register">Volver al registro</a>
+							<a class="custom_cta" href={ templ.URL(view.HomePath) }>Volver al registro</a>
 							if view.OK {
 								<button type="button" class="notice_close" data-close-page>Cerrar página</button>
 								<p id="close_hint" class="notice_hint text_xs" hidden>Si la página sigue abierta, ciérrala desde el navegador.</p>

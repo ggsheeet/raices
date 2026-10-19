@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"raices/database/sqlc"
+	"raices/env"
 	"raices/helpers"
 	"raices/payment"
 	"raices/templates/view/register"
@@ -45,17 +46,20 @@ func renderReceipt(w http.ResponseWriter, r *http.Request, view register.Receipt
 
 func missingReceipt() register.Receipt {
 	return register.Receipt{
-		Title:  "No encontramos ese pago",
-		Detail: "El enlace no corresponde a un registro. Puedes volver a empezar.",
+		Title:    "No encontramos ese pago",
+		Detail:   "El enlace no corresponde a un registro. Puedes volver a empezar.",
+		HomePath: "/register",
 	}
 }
 
 func receiptFor(order sqlc.Order) register.Receipt {
+	home := registerHome(order)
 	if order.Status != "paid" || order.FulfillmentStatus != "fulfilled" || order.EmailStatus != "sent" {
 		return register.Receipt{
-			Title:  "Registro",
-			Lead:   orderMessage(order, state.now()),
-			Detail: "Puedes volver al registro.",
+			Title:    "Registro",
+			Lead:     orderMessage(order, state.now()),
+			Detail:   "Puedes volver al registro.",
+			HomePath: home,
 		}
 	}
 	qty := int(order.Quantity)
@@ -66,10 +70,11 @@ func receiptFor(order sqlc.Order) register.Receipt {
 		detail = fmt.Sprintf("Enviamos tu boleto a %s. Revisa tu bandeja de entrada y, si no aparece, la carpeta de spam.", order.Email)
 	}
 	return register.Receipt{
-		OK:     true,
-		Title:  "Pago confirmado",
-		Lead:   lead,
-		Detail: detail,
+		OK:       true,
+		Title:    "Pago confirmado",
+		Lead:     lead,
+		Detail:   detail,
+		HomePath: home,
 		Facts: []register.Fact{
 			{Label: "A nombre de", Value: strings.TrimSpace(order.GivenName + " " + order.FamilyName)},
 			{Label: "Correo", Value: order.Email},
@@ -79,4 +84,11 @@ func receiptFor(order sqlc.Order) register.Receipt {
 			{Label: "Lugar", Value: "INP Emanuel Dios con Nosotros"},
 		},
 	}
+}
+
+func registerHome(order sqlc.Order) string {
+	if order.Church.Valid && order.Church.String == emanuelChurch && int(order.UnitPriceCents) == env.TicketPriceMembersCents {
+		return "/emanuel"
+	}
+	return "/register"
 }

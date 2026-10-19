@@ -9,19 +9,20 @@ import (
 )
 
 var (
-	Port                 string
-	Environment          string
-	AppBaseURL           string
-	SqlitePath           string
-	TicketPriceCents     int
-	MPPublicKey          string
-	MPAccessToken        string
-	MPWebhookSecret      string
-	ResendAPIKey         string
-	ResendFrom           string
-	AdminEmail           string
-	AdminPassword        string
-	LitestreamReplicaURL string
+	Port                    string
+	Environment             string
+	AppBaseURL              string
+	SqlitePath              string
+	TicketPriceCents        int
+	TicketPriceMembersCents int
+	MPPublicKey             string
+	MPAccessToken           string
+	MPWebhookSecret         string
+	ResendAPIKey            string
+	ResendFrom              string
+	AdminEmail              string
+	AdminPassword           string
+	LitestreamReplicaURL    string
 )
 
 func init() {
@@ -61,7 +62,10 @@ func Sync() error {
 	if AdminPassword, err = required("ADMIN_PASSWORD"); err != nil {
 		return err
 	}
-	if TicketPriceCents, err = parseTicketPrice(); err != nil {
+	if TicketPriceCents, err = parseTicketPrice("TICKET_PRICE"); err != nil {
+		return err
+	}
+	if TicketPriceMembersCents, err = parseTicketPrice("TICKET_PRICE_MEMBERS"); err != nil {
 		return err
 	}
 	return nil
@@ -75,14 +79,14 @@ func required(key string) (string, error) {
 	return value, nil
 }
 
-func parseTicketPrice() (int, error) {
-	raw := strings.TrimSpace(os.Getenv("TICKET_PRICE"))
+func parseTicketPrice(key string) (int, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
 	if raw == "" {
-		return 0, fmt.Errorf("TICKET_PRICE is required")
+		return 0, fmt.Errorf("%s is required", key)
 	}
 	pesos, err := strconv.Atoi(raw)
 	if err != nil || pesos <= 0 || pesos > math.MaxInt/100 {
-		return 0, fmt.Errorf("TICKET_PRICE must be a positive whole number of pesos")
+		return 0, fmt.Errorf("%s must be a positive whole number of pesos", key)
 	}
 	return pesos * 100, nil
 }

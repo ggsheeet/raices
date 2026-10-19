@@ -12,7 +12,6 @@ import (
 	"unicode/utf8"
 
 	"raices/database/sqlc"
-	"raices/env"
 	"raices/helpers"
 	"raices/payment"
 	"raices/templates/view/register"
@@ -41,8 +40,10 @@ func handleRegisterPay(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+	offer := offerFor(r)
+	payPath := offer.Base + "/pay"
 	if err := r.ParseForm(); err != nil {
-		renderPayPanel(w, r, payPanel("", helpers.FormErrorText(r.Context(), "request_unreadable")), helpers.HTMXFormError.Status)
+		renderPayPanel(w, r, payPanel(payPath, "", helpers.FormErrorText(r.Context(), "request_unreadable")), helpers.HTMXFormError.Status)
 		return
 	}
 
@@ -53,7 +54,7 @@ func handleRegisterPay(w http.ResponseWriter, r *http.Request) {
 	if checkoutKey != "" && state.db != nil {
 		existing, err := state.db.Queries.GetOrderByCheckoutKey(ctx, checkoutKey)
 		if err == nil {
-			renderExistingOrder(w, r, existing, now)
+			renderExistingOrder(w, r, existing, now, payPath)
 			return
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
@@ -63,33 +64,36 @@ func handleRegisterPay(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.TrimSpace(r.FormValue("token")) == "" {
-		renderPayPanel(w, r, payPanel(checkoutKey, helpers.FormErrorText(ctx, "token_required")), http.StatusBadRequest)
+		renderPayPanel(w, r, payPanel(payPath, checkoutKey, helpers.FormErrorText(ctx, "token_required")), http.StatusBadRequest)
 		return
 	}
 
 	payer, errMsg, ok := validatePayForm(r)
 	if !ok {
-		renderPayPanel(w, r, payPanel(checkoutKey, errMsg), http.StatusBadRequest)
+		renderPayPanel(w, r, payPanel(payPath, checkoutKey, errMsg), http.StatusBadRequest)
 		return
 	}
 	if checkoutKey == "" {
-		renderPayPanel(w, r, payPanel("", errMsg), http.StatusBadRequest)
+		renderPayPanel(w, r, payPanel(payPath, "", errMsg), http.StatusBadRequest)
 		return
 	}
+	if offer.FixedChurch != "" {
+		payer.church = offer.FixedChurch
+	}
 
-	order, err := reserveOrder(ctx, checkoutKey, payer, now)
+	order, err := reserveOrder(ctx, checkoutKey, payer, now, offer.UnitCents)
 	if err != nil {
 		var re *reserveErr
 		if errors.As(err, &re) {
 			switch re.kind {
 			case "sales_closed":
-				renderPayPanel(w, r, payPanel(checkoutKey, msgSalesClosed), http.StatusBadRequest)
+				renderPayPanel(w, r, payPanel(payPath, checkoutKey, msgSalesClosed), http.StatusBadRequest)
 				return
 			case "capacity":
-				renderPayPanel(w, r, payPanel(checkoutKey, fmt.Sprintf("Quedan %d lugares.", re.seats)), http.StatusBadRequest)
+				renderPayPanel(w, r, payPanel(payPath, checkoutKey, fmt.Sprintf("Quedan %d lugares.", re.seats)), http.StatusBadRequest)
 				return
 			case "duplicate":
-				renderExistingOrder(w, r, re.order, now)
+				renderExistingOrder(w, r, re.order, now, payPath)
 				return
 			}
 		}
@@ -123,7 +127,7 @@ func handleRegisterPay(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
-		renderPayPanel(w, r, payPanel(fresh, msgRejected), http.StatusBadRequest)
+		renderPayPanel(w, r, payPanel(payPath, fresh, msgRejected), http.StatusBadRequest)
 		return
 	}
 
@@ -143,14 +147,14 @@ func handleRegisterPay(w http.ResponseWriter, r *http.Request) {
 	renderPayPanel(w, r, orderPanel(order, now, challenge), http.StatusOK)
 }
 
-func renderExistingOrder(w http.ResponseWriter, r *http.Request, order sqlc.Order, now time.Time) {
+func renderExistingOrder(w http.ResponseWriter, r *http.Request, order sqlc.Order, now time.Time, payPath string) {
 	if order.Status == "rejected" {
 		fresh, err := newSecret()
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
-		renderPayPanel(w, r, payPanel(fresh, msgRejected), http.StatusBadRequest)
+		renderPayPanel(w, r, payPanel(payPath, fresh, msgRejected), http.StatusBadRequest)
 		return
 	}
 	renderPayPanel(w, r, orderPanel(order, now, ""), http.StatusOK)
@@ -234,7 +238,7 @@ func validatePayForm(r *http.Request) (payerInput, string, bool) {
 	}, "", true
 }
 
-func reserveOrder(ctx context.Context, checkoutKey string, payer payerInput, now time.Time) (sqlc.Order, error) {
+func reserveOrder(ctx context.Context, checkoutKey string, payer payerInput, now time.Time, unitCents int) (sqlc.Order, error) {
 	var order sqlc.Order
 	err := state.db.InTx(ctx, func(q *sqlc.Queries) error {
 		if err := ExpireStale(ctx, q, now); err != nil {
@@ -255,7 +259,7 @@ func reserveOrder(ctx context.Context, checkoutKey string, payer payerInput, now
 		if err != nil {
 			return err
 		}
-		unit := env.TicketPriceCents
+		unit := unitCents
 		row, err := q.InsertOrder(ctx, sqlc.InsertOrderParams{
 			GivenName:         payer.givenName,
 			FamilyName:        payer.familyName,

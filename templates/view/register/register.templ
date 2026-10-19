@@ -8,22 +8,22 @@ import (
 	"raices/templates/component"
 )
 
-templ Page(result helpers.FormValidationResult) {
-	@registerView(1, false, result, "")
+templ Page(offer Offer, result helpers.FormValidationResult) {
+	@registerView(offer, 1, false, result, "")
 }
 
-templ Checkout(qty int, checkoutKey string) {
-	@registerView(qty, true, helpers.NewFormValidationResult(), checkoutKey)
+templ Checkout(offer Offer, qty int, checkoutKey string) {
+	@registerView(offer, qty, true, helpers.NewFormValidationResult(), checkoutKey)
 }
 
-templ QuantityPage(qty int) {
-	@registerView(qty, false, helpers.NewFormValidationResult(), "")
+templ QuantityPage(offer Offer, qty int) {
+	@registerView(offer, qty, false, helpers.NewFormValidationResult(), "")
 }
 
-templ registerView(qty int, showPayer bool, result helpers.FormValidationResult, checkoutKey string) {
+templ registerView(offer Offer, qty int, showPayer bool, result helpers.FormValidationResult, checkoutKey string) {
 	{{
 		qtyAttr := strconv.Itoa(qty)
-		unitPesos := env.TicketPriceCents / 100
+		unitPesos := offer.UnitCents / 100
 		unitPesosAttr := strconv.Itoa(unitPesos)
 		linePriceLabel := "Mex$" + strconv.Itoa(qty*unitPesos) + ".00"
 		description := "Registra tu lugar para la Conferencia Raíces 2026, Del Pulpito al Hogar, del 30 de octubre al 1 de noviembre en INP Emanuel Dios con Nosotros, Monterrey."
@@ -51,9 +51,9 @@ templ registerView(qty int, showPayer bool, result helpers.FormValidationResult,
 					</header>
 					<div class="register_columns" x-data="ticket" data-qty={ qtyAttr } data-unit-pesos={ unitPesosAttr }>
 						if showPayer {
-							@PayerForm(qty)
+							@PayerForm(offer, qty)
 						} else {
-							@TicketCard(qty)
+							@TicketCard(offer, qty)
 						}
 						<aside class="order_summary" aria-label="Resumen del pedido">
 							<div class="order_banner">
@@ -93,9 +93,9 @@ templ registerView(qty int, showPayer bool, result helpers.FormValidationResult,
 								</div>
 								<div id="quantity_action">
 									if showPayer {
-										@CheckoutPanel(PayView(checkoutKey, ""))
+										@CheckoutPanel(PayView(offer.Base+"/pay", checkoutKey, ""))
 									} else {
-										@QuantityForm(qty, result)
+										@QuantityForm(offer, qty, result)
 									}
 								</div>
 							</div>
@@ -109,21 +109,21 @@ templ registerView(qty int, showPayer bool, result helpers.FormValidationResult,
 	</html>
 }
 
-templ PayerStep(qty int, checkoutKey string) {
-	@PayerForm(qty)
+templ PayerStep(offer Offer, qty int, checkoutKey string) {
+	@PayerForm(offer, qty)
 	<hx-partial hx-target="#quantity_action">
-		@CheckoutPanel(PayView(checkoutKey, ""))
+		@CheckoutPanel(PayView(offer.Base+"/pay", checkoutKey, ""))
 	</hx-partial>
 }
 
-templ QuantityStep(qty int) {
-	@TicketCard(qty)
+templ QuantityStep(offer Offer, qty int) {
+	@TicketCard(offer, qty)
 	<hx-partial hx-target="#quantity_action">
-		@QuantityForm(qty, helpers.NewFormValidationResult())
+		@QuantityForm(offer, qty, helpers.NewFormValidationResult())
 	</hx-partial>
 }
 
-templ TicketCard(qty int) {
+templ TicketCard(offer Offer, qty int) {
 	<article class="ticket_card">
 		<div class="ticket_top">
 			<h2 class="ticket_name">Admisión general</h2>
@@ -135,8 +135,11 @@ templ TicketCard(qty int) {
 		</div>
 		<div class="ticket_body">
 			<p>
-				<span class="ticket_price">{ "Mex$" + strconv.Itoa(env.TicketPriceCents/100) + ".00" }</span>
+				<span class="ticket_price">{ "Mex$" + strconv.Itoa(offer.UnitCents/100) + ".00" }</span>
 			</p>
+			if offer.FixedChurch != "" {
+				<p class="text_sm">Precio para miembros de { offer.FixedChurch }.</p>
+			}
 			<p class="text_sm">Las compras cierran al final del 30 de octubre.</p>
 			<div class="ticket_description text_sm">
 				<span>
@@ -177,14 +180,14 @@ templ TicketCard(qty int) {
 	</article>
 }
 
-templ QuantityForm(qty int, result helpers.FormValidationResult) {
+templ QuantityForm(offer Offer, qty int, result helpers.FormValidationResult) {
 	{{ qtyError := helpers.GetFormErrorMessage(result, "qty") }}
 	<form
 		id="ticket_quantity_form"
 		class="form_container slim"
 		method="post"
-		action="/register/amount"
-		hx-post="/register/amount"
+		action={ offer.Base + "/amount" }
+		hx-post={ offer.Base + "/amount" }
 		hx-target=".ticket_card"
 		hx-swap="outerHTML"
 		hx-indicator="#spinner"
@@ -219,7 +222,7 @@ templ CheckoutPanel(view PanelView) {
 
 templ checkoutPanelInner(view PanelView) {
 	if view.Pay {
-		@PayForm(view.CheckoutKey, view.Error)
+		@PayForm(view.PayPath, view.CheckoutKey, view.Error)
 	} else {
 		<div class="badge_message text_sm">
 			<p>{ view.Message }</p>
@@ -235,13 +238,13 @@ templ checkoutPanelInner(view PanelView) {
 	}
 }
 
-templ PayForm(checkoutKey string, errMsg string) {
+templ PayForm(payPath string, checkoutKey string, errMsg string) {
 	<form
 		id="pay_form"
 		class="form_container slim"
 		method="post"
-		action="/register/pay"
-		hx-post="/register/pay"
+		action={ payPath }
+		hx-post={ payPath }
 		hx-include="#payer_form"
 		hx-target="#checkout_panel"
 		hx-swap="outerHTML"
@@ -261,12 +264,12 @@ templ PayForm(checkoutKey string, errMsg string) {
 	</form>
 }
 
-templ PayerForm(qty int) {
+templ PayerForm(offer Offer, qty int) {
 	<form id="payer_form" class="form_container" autocomplete="on">
 		<a
 			class="text_link text_sm"
-			href={ templ.URL("/register/quantity?qty=" + strconv.Itoa(qty)) }
-			hx-get={ "/register/quantity?qty=" + strconv.Itoa(qty) }
+			href={ templ.URL(offer.Base + "/quantity?qty=" + strconv.Itoa(qty)) }
+			hx-get={ offer.Base + "/quantity?qty=" + strconv.Itoa(qty) }
 			hx-target="#payer_form"
 			hx-swap="outerHTML"
 		>Cambiar cantidad</a>
@@ -293,10 +296,12 @@ templ PayerForm(qty int) {
 				<label for="age">Edad</label>
 				<input id="age" name="age" type="number" inputmode="numeric" min="1" max="120" step="1" placeholder="30" required/>
 			</div>
-			<div class="field_wrapper">
-				<label for="church">Iglesia a la que asistes (opcional)</label>
-				<input id="church" name="church" type="text" autocomplete="organization" placeholder="Nombre de tu iglesia"/>
-			</div>
+			if offer.FixedChurch == "" {
+				<div class="field_wrapper">
+					<label for="church">Iglesia a la que asistes (opcional)</label>
+					<input id="church" name="church" type="text" autocomplete="organization" placeholder="Nombre de tu iglesia"/>
+				</div>
+			}
 		</fieldset>
 		<hr class="form_divider">
 		<div class="form_container mp">

@@ -20,7 +20,7 @@ Deploy one instance with `--max-instances 1`, `--execution-environment gen2`, an
 
 `LITESTREAM_REPLICA_URL` is optional. When set, the entrypoint restores only if the local SQLite file is missing, then replicates. When empty, the entrypoint execs `/raices`. Creating the replica bucket is a human deploy step.
 
-Boot requires non-empty `SQLITE_PATH`, `APP_BASE_URL`, `TICKET_PRICE`, `MP_ACCESS_TOKEN`, `MP_PUBLIC_KEY`, `MP_WEBHOOK_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD`. `TICKET_PRICE` is whole pesos.
+Boot requires non-empty `SQLITE_PATH`, `APP_BASE_URL`, `TICKET_PRICE`, `TICKET_PRICE_MEMBERS`, `MP_ACCESS_TOKEN`, `MP_PUBLIC_KEY`, `MP_WEBHOOK_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD`. `TICKET_PRICE` and `TICKET_PRICE_MEMBERS` are whole pesos. `/emanuel` charges the member price.
 
 ## Other targets
 

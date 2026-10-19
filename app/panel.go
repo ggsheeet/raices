@@ -21,12 +21,8 @@ const (
 	msgSalesClosed = "Las compras cerraron."
 )
 
-func payPanel(checkoutKey, errMsg string) register.PanelView {
-	return register.PanelView{
-		Pay:         true,
-		CheckoutKey: checkoutKey,
-		Error:       errMsg,
-	}
+func payPanel(payPath, checkoutKey, errMsg string) register.PanelView {
+	return register.PayView(payPath, checkoutKey, errMsg)
 }
 
 func orderPanel(order sqlc.Order, now time.Time, challengeURL string) register.PanelView {

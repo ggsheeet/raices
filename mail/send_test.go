@@ -40,6 +40,7 @@ func setMailEnv(t *testing.T) {
 	t.Setenv("SQLITE_PATH", filepath.Join(t.TempDir(), "unused.db"))
 	t.Setenv("APP_BASE_URL", "http://tickets.example")
 	t.Setenv("TICKET_PRICE", "250")
+	t.Setenv("TICKET_PRICE_MEMBERS", "100")
 	t.Setenv("MP_ACCESS_TOKEN", "mp-access-token")
 	t.Setenv("MP_PUBLIC_KEY", "mp-public-key")
 	t.Setenv("MP_WEBHOOK_SECRET", "mp-webhook-secret")

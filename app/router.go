@@ -75,6 +75,10 @@ func Routes(deps Dependencies) {
 	mux.HandleFunc("POST /register/pay", handleRegisterPay)
 	mux.HandleFunc("GET /register/status", handleRegisterStatus)
 	mux.HandleFunc("GET /register/confirmed", handleRegisterConfirmed)
+	mux.HandleFunc("GET /emanuel", handleRegisterPage)
+	mux.HandleFunc("GET /emanuel/quantity", handleRegisterQuantity)
+	mux.HandleFunc("POST /emanuel/amount", handleRegisterAmount)
+	mux.HandleFunc("POST /emanuel/pay", handleRegisterPay)
 	mux.HandleFunc("POST /webhooks/mercadopago", handleMercadoPagoWebhook)
 }
 
@@ -90,7 +94,7 @@ func handleLoginPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleRegisterPage(w http.ResponseWriter, r *http.Request) {
-	if err := helpers.RenderPage(w, r, register.Page(helpers.NewFormValidationResult())); err != nil {
+	if err := helpers.RenderPage(w, r, register.Page(offerFor(r), helpers.NewFormValidationResult())); err != nil {
 		logger.Error("render register page: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}

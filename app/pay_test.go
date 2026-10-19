@@ -41,6 +41,7 @@ func setPayEnv(t *testing.T) {
 	t.Setenv("SQLITE_PATH", filepath.Join(t.TempDir(), "unused.db"))
 	t.Setenv("APP_BASE_URL", "http://localhost:3000")
 	t.Setenv("TICKET_PRICE", "250")
+	t.Setenv("TICKET_PRICE_MEMBERS", "100")
 	t.Setenv("MP_ACCESS_TOKEN", "mp-access-token")
 	t.Setenv("MP_PUBLIC_KEY", "mp-public-key")
 	t.Setenv("MP_WEBHOOK_SECRET", "mp-webhook-secret")
@@ -96,7 +97,12 @@ func payValues(checkoutKey string) url.Values {
 
 func postPay(t *testing.T, mux *http.ServeMux, vals url.Values) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, "/register/pay", strings.NewReader(vals.Encode()))
+	return postPayPath(t, mux, "/register/pay", vals)
+}
+
+func postPayPath(t *testing.T, mux *http.ServeMux, path string, vals url.Values) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(vals.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -608,5 +614,158 @@ func TestStatusRedirectsAfterTicketsSent(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("confirmed page missing %q: %s", want, body)
 		}
+	}
+	if !strings.Contains(body, `href="/register"`) {
+		t.Fatalf("confirmed home: %s", body)
+	}
+}
+
+func TestEmanuelPageUsesMemberPrice(t *testing.T) {
+	mux, _ := testMux(t, &fakeCharger{}, openNow())
+	member := httptest.NewRecorder()
+	mux.ServeHTTP(member, httptest.NewRequest(http.MethodGet, "/emanuel", nil))
+	if member.Code != http.StatusOK {
+		t.Fatalf("status %d", member.Code)
+	}
+	body := member.Body.String()
+	for _, want := range []string{
+		`data-unit-pesos="100"`,
+		"Mex$100.00",
+		"Precio para miembros de INP Emanuel.",
+		`action="/emanuel/amount"`,
+		`hx-post="/emanuel/amount"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("missing %q", want)
+		}
+	}
+	if strings.Contains(body, "/register/amount") || strings.Contains(body, `data-unit-pesos="250"`) {
+		t.Fatalf("public price leaked: %s", body)
+	}
+
+	public := httptest.NewRecorder()
+	mux.ServeHTTP(public, httptest.NewRequest(http.MethodGet, "/register", nil))
+	pub := public.Body.String()
+	if !strings.Contains(pub, `data-unit-pesos="250"`) || !strings.Contains(pub, `action="/register/amount"`) {
+		t.Fatalf("public page: %s", pub)
+	}
+	if strings.Contains(pub, "Precio para miembros") || strings.Contains(pub, "/emanuel/amount") {
+		t.Fatalf("member offer leaked into public page")
+	}
+}
+
+func TestEmanuelAmountHidesChurch(t *testing.T) {
+	mux, _ := testMux(t, &fakeCharger{}, openNow())
+	body := postAmount(t, mux, "/emanuel/amount")
+	for _, want := range []string{
+		`name="given_name"`,
+		`name="family_name"`,
+		`name="email"`,
+		`name="email_confirm"`,
+		`name="age"`,
+		`action="/emanuel/pay"`,
+		`hx-post="/emanuel/pay"`,
+		`/emanuel/quantity?qty=2`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("missing %q in %s", want, body)
+		}
+	}
+	if strings.Contains(body, `name="church"`) || strings.Contains(body, "/register/") {
+		t.Fatalf("member payer form: %s", body)
+	}
+
+	public := postAmount(t, mux, "/register/amount")
+	if !strings.Contains(public, `name="church"`) || !strings.Contains(public, `action="/register/pay"`) {
+		t.Fatalf("public payer form: %s", public)
+	}
+}
+
+func postAmount(t *testing.T, mux *http.ServeMux, path string) string {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(url.Values{"qty": {"2"}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%s status %d body %s", path, rec.Code, rec.Body.String())
+	}
+	return rec.Body.String()
+}
+
+func TestEmanuelPayForcesChurchAndMemberPrice(t *testing.T) {
+	charger := &fakeCharger{result: payment.Result{Kind: payment.KindNoOrder}}
+	mux, db := testMux(t, charger, openNow())
+	vals := payValues("ck-member")
+	vals.Set("church", "Otra iglesia")
+	rec := postPayPath(t, mux, "/emanuel/pay", vals)
+	body := rec.Body.String()
+	if !strings.Contains(body, msgRejected) || !strings.Contains(body, `action="/emanuel/pay"`) {
+		t.Fatalf("body %s", body)
+	}
+	if strings.Contains(body, "/register/pay") {
+		t.Fatalf("retry left member checkout: %s", body)
+	}
+	if len(charger.calls) != 1 || charger.calls[0].TotalCents != 20000 {
+		t.Fatalf("charge %+v", charger.calls)
+	}
+	order, err := db.Queries.GetOrderByCheckoutKey(context.Background(), "ck-member")
+	if err != nil {
+		t.Fatalf("order: %v", err)
+	}
+	if !order.Church.Valid || order.Church.String != emanuelChurch {
+		t.Fatalf("church %+v", order.Church)
+	}
+	if order.UnitPriceCents != 10000 || order.TotalCents != 20000 {
+		t.Fatalf("price unit %d total %d", order.UnitPriceCents, order.TotalCents)
+	}
+}
+
+func TestPublicPayKeepsTypedChurchAndPublicPrice(t *testing.T) {
+	charger := &fakeCharger{result: payment.Result{Kind: payment.KindUnknown}}
+	mux, db := testMux(t, charger, openNow())
+	vals := payValues("ck-public-church")
+	vals.Set("church", "INP Emanuel")
+	rec := postPay(t, mux, vals)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+	}
+	if len(charger.calls) != 1 || charger.calls[0].TotalCents != 50000 {
+		t.Fatalf("charge %+v", charger.calls)
+	}
+	order, err := db.Queries.GetOrderByCheckoutKey(context.Background(), "ck-public-church")
+	if err != nil {
+		t.Fatalf("order: %v", err)
+	}
+	if !order.Church.Valid || order.Church.String != "INP Emanuel" {
+		t.Fatalf("church %+v", order.Church)
+	}
+	if order.UnitPriceCents != 25000 {
+		t.Fatalf("unit %d", order.UnitPriceCents)
+	}
+}
+
+func TestMemberReceiptReturnsToEmanuel(t *testing.T) {
+	setPayEnv(t)
+	member := sqlc.Order{
+		Status:            "paid",
+		FulfillmentStatus: "fulfilled",
+		EmailStatus:       "sent",
+		Church:            sql.NullString{String: emanuelChurch, Valid: true},
+		UnitPriceCents:    int64(env.TicketPriceMembersCents),
+		Quantity:          1,
+		TotalCents:        int64(env.TicketPriceMembersCents),
+		GivenName:         "Ada",
+		FamilyName:        "Lovelace",
+		Email:             "ada@example.com",
+	}
+	if got := receiptFor(member).HomePath; got != "/emanuel" {
+		t.Fatalf("home %q", got)
+	}
+	typed := member
+	typed.UnitPriceCents = int64(env.TicketPriceCents)
+	if got := receiptFor(typed).HomePath; got != "/register" {
+		t.Fatalf("public home %q", got)
 	}
 }
