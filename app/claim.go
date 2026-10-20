@@ -16,7 +16,12 @@ import (
 var mexicoCity = time.FixedZone("CST", -6*60*60)
 
 func handleClaim(w http.ResponseWriter, r *http.Request) {
-	if !requireSession(w, r) {
+	ok, err := requireSession(w, r)
+	if err != nil {
+		logger.Error("claim session: %v", err)
+		return
+	}
+	if !ok {
 		return
 	}
 
@@ -37,6 +42,7 @@ func handleClaim(w http.ResponseWriter, r *http.Request) {
 	ticket, err := state.db.Queries.GetTicketByToken(r.Context(), sql.NullString{String: token, Valid: token != ""})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			logger.Error("claim: ticket not found")
 			if err := helpers.RenderPage(w, r, claim.NotFound()); err != nil {
 				logger.Error("render claim missing: %v", err)
 				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -49,6 +55,7 @@ func handleClaim(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if n == 0 && ticket.Status != "used" {
+		logger.Error("claim: ticket is not claimable")
 		if err := helpers.RenderPage(w, r, claim.NotFound()); err != nil {
 			logger.Error("render claim missing: %v", err)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -62,7 +69,10 @@ func handleClaim(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	index := ticketIndex(r, ticket)
+	index, err := ticketIndex(r, ticket)
+	if err != nil {
+		logger.Error("claim ticket index: %v", err)
+	}
 	usedAt := ticket.UsedAt.String
 	if n == 1 {
 		usedAt = stamp
@@ -78,17 +88,17 @@ func handleClaim(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func ticketIndex(r *http.Request, ticket sqlc.Ticket) int {
+func ticketIndex(r *http.Request, ticket sqlc.Ticket) (int, error) {
 	tickets, err := state.db.Queries.ListTicketsByOrder(r.Context(), ticket.OrderID)
 	if err != nil {
-		return 0
+		return 0, err
 	}
 	for i, row := range tickets {
 		if row.ID == ticket.ID {
-			return i + 1
+			return i + 1, nil
 		}
 	}
-	return 0
+	return 0, nil
 }
 
 func formatMexico(rfc3339 string) string {

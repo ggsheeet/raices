@@ -19,6 +19,7 @@ const sessionMaxAge = 7 * 24 * 60 * 60
 
 func handleLoginForm(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
+		logger.Error("login parse form: %v", err)
 		failLogin(w, r, "", r.FormValue("next"), helpers.NewFormValidationResult(helpers.FormValidationError{
 			Field:   "general",
 			Message: "request_invalid",
@@ -30,6 +31,7 @@ func handleLoginForm(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 	next := r.FormValue("next")
 	if !credEqual(email, env.AdminEmail) || !credEqual(password, env.AdminPassword) {
+		logger.Error("login: credentials rejected")
 		failLogin(w, r, email, next, helpers.NewFormValidationResult(helpers.FormValidationError{
 			Field:   "general",
 			Message: "credentials_wrong",
@@ -39,6 +41,7 @@ func handleLoginForm(w http.ResponseWriter, r *http.Request) {
 
 	token, err := newSecret()
 	if err != nil {
+		logger.Error("login secret: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -77,6 +80,7 @@ func handleLoginForm(w http.ResponseWriter, r *http.Request) {
 func failLogin(w http.ResponseWriter, r *http.Request, email, next string, result helpers.FormValidationResult) {
 	if helpers.IsHTMX(r) {
 		if err := helpers.RenderErrors(w, r, auth.FormErrors(result), helpers.HTMXFormError); err != nil {
+			logger.Error("render login errors: %v", err)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
 		return
@@ -84,7 +88,9 @@ func failLogin(w http.ResponseWriter, r *http.Request, email, next string, resul
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(helpers.HTMXFormError.Status)
-	_ = helpers.RenderPage(w, r, auth.Page(email, next, result))
+	if err := helpers.RenderPage(w, r, auth.Page(email, next, result)); err != nil {
+		logger.Error("render login page: %v", err)
+	}
 }
 
 func credEqual(submitted, stored string) bool {

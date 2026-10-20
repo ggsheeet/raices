@@ -4,10 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
+	"time"
 
 	"github.com/mercadopago/sdk-go/pkg/mperror"
 	"github.com/mercadopago/sdk-go/pkg/order"
 	"github.com/mercadopago/sdk-go/pkg/requestoptions"
+)
+
+const (
+	// statementDescriptor is what the buyer sees on the card statement.
+	// Mercado Pago allows up to 13 letters or numbers.
+	statementDescriptor = "RAICES"
+	itemTitle           = "Boleto Raíces 2026"
+	itemCode            = "raices-2026"
+	memberItemTitle     = "Boleto Raíces 2026 Miembros Emanuel"
+	memberItemCode      = "raices-2026-miembros"
+	itemCategory        = "tickets"
 )
 
 type orderCharger struct {
@@ -23,14 +36,15 @@ func NewCharger(mp *MPClient) Charger {
 
 func (c orderCharger) Create(ctx context.Context, charge Charge) Result {
 	if c.client == nil {
-		return Result{Kind: KindUnknown}
+		return Result{Kind: KindUnknown, Err: errNoOrderClient}
 	}
 
 	amount := FormatCents(charge.TotalCents)
 	method := &order.PaymentMethodRequest{
-		Type:         "credit_card",
-		Token:        charge.Token,
-		Installments: 1,
+		Type:                "credit_card",
+		Token:               charge.Token,
+		Installments:        1,
+		StatementDescriptor: statementDescriptor,
 	}
 	if charge.PaymentMethodID != "" {
 		method.ID = charge.PaymentMethodID
@@ -53,7 +67,10 @@ func (c orderCharger) Create(ctx context.Context, charge Charge) Result {
 			FirstName: charge.GivenName,
 			LastName:  charge.FamilyName,
 		},
+		Items:          lineItems(charge),
+		AdditionalInfo: payerInfo(charge),
 		Config: &order.ConfigRequest{
+			StatementDescriptor: statementDescriptor,
 			Online: &order.OnlineConfigRequest{
 				TransactionSecurity: &order.TransactionSecurityRequest{
 					Validation:     "on_fraud_risk",
@@ -68,23 +85,61 @@ func (c orderCharger) Create(ctx context.Context, charge Charge) Result {
 	if err == nil && resp != nil {
 		return resultFromOrder(resp)
 	}
+	if err == nil {
+		return Result{Kind: KindUnknown, Err: errors.New("mercadopago order response was empty")}
+	}
 
 	var respErr *mperror.ResponseError
 	if errors.As(err, &respErr) && respErr != nil {
 		if respErr.StatusCode == 409 || respErr.StatusCode == 429 || respErr.StatusCode >= 500 {
-			return Result{Kind: KindUnknown}
+			return Result{Kind: KindUnknown, Err: err}
 		}
 		var parsed order.Response
 		if json.Unmarshal([]byte(respErr.Message), &parsed) == nil && (parsed.ID != "" || parsed.Status != "") {
-			return resultFromOrder(&parsed)
+			out := resultFromOrder(&parsed)
+			out.Err = err
+			return out
 		}
 		if respErr.StatusCode == 400 || respErr.StatusCode == 422 {
-			return Result{Kind: KindNoOrder}
+			return Result{Kind: KindNoOrder, Err: err}
 		}
-		return Result{Kind: KindUnknown}
+		return Result{Kind: KindUnknown, Err: err}
 	}
 
-	return Result{Kind: KindUnknown}
+	return Result{Kind: KindUnknown, Err: err}
+}
+
+func lineItems(charge Charge) []order.ItemsRequest {
+	if charge.Quantity < 1 {
+		return nil
+	}
+	title, code := itemTitle, itemCode
+	if charge.Member {
+		title, code = memberItemTitle, memberItemCode
+	}
+	return []order.ItemsRequest{{
+		Title:        title,
+		ExternalCode: code,
+		CategoryID:   itemCategory,
+		UnitPrice:    FormatCents(charge.UnitCents),
+		Quantity:     charge.Quantity,
+	}}
+}
+
+func payerInfo(charge Charge) *order.AdditionalInfoRequest {
+	stamp := registrationDate(charge.RegisteredAt)
+	if stamp == "" {
+		return nil
+	}
+	return &order.AdditionalInfoRequest{PayerRegistrationDate: stamp}
+}
+
+func registrationDate(raw string) string {
+	t, err := time.ParseInLocation("2006-01-02 15:04:05", strings.TrimSpace(raw), time.UTC)
+	if err != nil {
+		return ""
+	}
+	return t.Format("2006-01-02T15:04:05.000-07:00")
 }
 
 func resultFromOrder(resp *order.Response) Result {

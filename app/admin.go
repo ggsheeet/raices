@@ -9,7 +9,12 @@ import (
 )
 
 func handleAdmin(w http.ResponseWriter, r *http.Request) {
-	if !requireSession(w, r) {
+	ok, err := requireSession(w, r)
+	if err != nil {
+		logger.Error("admin session: %v", err)
+		return
+	}
+	if !ok {
 		return
 	}
 
@@ -45,23 +50,32 @@ func handleAdmin(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAdminResend(w http.ResponseWriter, r *http.Request) {
-	if !requireSession(w, r) {
+	ok, err := requireSession(w, r)
+	if err != nil {
+		logger.Error("admin resend session: %v", err)
+		return
+	}
+	if !ok {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
+		logger.Error("admin resend parse form: %v", err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 
 	id, err := strconv.ParseInt(r.FormValue("order_id"), 10, 64)
-	if err == nil {
-		order, loadErr := state.db.Queries.GetOrderByID(r.Context(), id)
-		if loadErr != nil {
-			logger.Error("admin resend load: %v", loadErr)
-		} else if order.EmailStatus == "failed" {
-			if sendErr := state.sender.Send(r.Context(), order); sendErr != nil {
-				logger.Error("admin resend: %v", sendErr)
-			}
+	if err != nil {
+		logger.Error("admin resend order id: %v", err)
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	order, loadErr := state.db.Queries.GetOrderByID(r.Context(), id)
+	if loadErr != nil {
+		logger.Error("admin resend load: %v", loadErr)
+	} else if order.EmailStatus == "failed" {
+		if sendErr := state.sender.Send(r.Context(), order); sendErr != nil {
+			logger.Error("admin resend: %v", sendErr)
 		}
 	}
 

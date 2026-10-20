@@ -67,10 +67,7 @@ func wait(ctx context.Context, d time.Duration) error {
 func (s *Sender) Send(ctx context.Context, order sqlc.Order) error {
 	tickets, err := s.db.Queries.ListTicketsByOrder(ctx, order.ID)
 	if err != nil {
-		if persistErr := s.persist(ctx, order.ID, "failed", err.Error()); persistErr != nil {
-			return persistErr
-		}
-		return err
+		return failSend(s, ctx, order.ID, err)
 	}
 
 	name := strings.TrimSpace(order.GivenName + " " + order.FamilyName)
@@ -91,9 +88,8 @@ func (s *Sender) Send(ctx context.Context, order sqlc.Order) error {
 			Count: count,
 		})
 		if err != nil {
-			msg := "qr encode failed"
-			if persistErr := s.persist(ctx, order.ID, "failed", msg); persistErr != nil {
-				return persistErr
+			if persistErr := s.persist(ctx, order.ID, "failed", "qr encode failed"); persistErr != nil {
+				return fmt.Errorf("%w; persist email status: %v", err, persistErr)
 			}
 			return err
 		}
@@ -102,11 +98,7 @@ func (s *Sender) Send(ctx context.Context, order sqlc.Order) error {
 	}
 
 	if len(pngs) == 0 {
-		msg := "no issued tickets with tokens"
-		if persistErr := s.persist(ctx, order.ID, "failed", msg); persistErr != nil {
-			return persistErr
-		}
-		return fmt.Errorf("%s", msg)
+		return failSend(s, ctx, order.ID, fmt.Errorf("no issued tickets with tokens"))
 	}
 
 	req := &resend.SendEmailRequest{
@@ -129,19 +121,16 @@ func (s *Sender) Send(ctx context.Context, order sqlc.Order) error {
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt == 1 {
 			if err := s.sleep(ctx, waitBeforeSecond); err != nil {
-				_ = s.persist(ctx, order.ID, "failed", err.Error())
-				return err
+				return failSend(s, ctx, order.ID, err)
 			}
 		}
 		if attempt == 2 {
 			if err := s.sleep(ctx, waitBeforeThird); err != nil {
-				_ = s.persist(ctx, order.ID, "failed", err.Error())
-				return err
+				return failSend(s, ctx, order.ID, err)
 			}
 		}
 		if err := ctx.Err(); err != nil {
-			_ = s.persist(ctx, order.ID, "failed", err.Error())
-			return err
+			return failSend(s, ctx, order.ID, err)
 		}
 		_, err := s.poster.SendWithContext(ctx, req)
 		if err == nil {
@@ -152,9 +141,16 @@ func (s *Sender) Send(ctx context.Context, order sqlc.Order) error {
 
 	msg := lastErr.Error()
 	if persistErr := s.persist(ctx, order.ID, "failed", msg); persistErr != nil {
-		return persistErr
+		return fmt.Errorf("%v; persist email status: %w", lastErr, persistErr)
 	}
 	return lastErr
+}
+
+func failSend(s *Sender, ctx context.Context, orderID int64, err error) error {
+	if persistErr := s.persist(ctx, orderID, "failed", err.Error()); persistErr != nil {
+		return fmt.Errorf("%v; persist email status: %w", err, persistErr)
+	}
+	return err
 }
 
 func (s *Sender) persist(ctx context.Context, orderID int64, status, lastErr string) error {

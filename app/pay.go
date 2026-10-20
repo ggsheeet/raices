@@ -37,12 +37,14 @@ func (e *reserveErr) Error() string { return e.kind }
 
 func handleRegisterPay(w http.ResponseWriter, r *http.Request) {
 	if state.db == nil || state.charger == nil {
+		logger.Error("pay: database or charger is not configured")
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 	offer := offerFor(r)
 	payPath := offer.Base + "/pay"
 	if err := r.ParseForm(); err != nil {
+		logger.Error("pay parse form: %v", err)
 		renderPayPanel(w, r, payPanel(payPath, "", helpers.FormErrorText(r.Context(), "request_unreadable")), helpers.HTMXFormError.Status)
 		return
 	}
@@ -58,23 +60,31 @@ func handleRegisterPay(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
+			logger.Error("pay checkout lookup: %v", err)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
 	}
 
 	if strings.TrimSpace(r.FormValue("token")) == "" {
+		logger.Error("pay: %s", helpers.FormErrorText(ctx, "token_required"))
 		renderPayPanel(w, r, payPanel(payPath, checkoutKey, helpers.FormErrorText(ctx, "token_required")), http.StatusBadRequest)
 		return
 	}
 
 	payer, errMsg, ok := validatePayForm(r)
 	if !ok {
+		if errMsg == "" {
+			logger.Error("pay: form is invalid")
+		} else {
+			logger.Error("pay: %s", errMsg)
+		}
 		renderPayPanel(w, r, payPanel(payPath, checkoutKey, errMsg), http.StatusBadRequest)
 		return
 	}
 	if checkoutKey == "" {
-		renderPayPanel(w, r, payPanel(payPath, "", errMsg), http.StatusBadRequest)
+		logger.Error("pay: checkout key is required")
+		renderPayPanel(w, r, payPanel(payPath, "", "No se pudo iniciar el pago."), http.StatusBadRequest)
 		return
 	}
 	if offer.FixedChurch != "" {
@@ -87,9 +97,11 @@ func handleRegisterPay(w http.ResponseWriter, r *http.Request) {
 		if errors.As(err, &re) {
 			switch re.kind {
 			case "sales_closed":
+				logger.Error("reserve: sales closed")
 				renderPayPanel(w, r, payPanel(payPath, checkoutKey, msgSalesClosed), http.StatusBadRequest)
 				return
 			case "capacity":
+				logger.Error("reserve: not enough seats, %d left", re.seats)
 				renderPayPanel(w, r, payPanel(payPath, checkoutKey, fmt.Sprintf("Quedan %d lugares.", re.seats)), http.StatusBadRequest)
 				return
 			case "duplicate":
@@ -111,10 +123,19 @@ func handleRegisterPay(w http.ResponseWriter, r *http.Request) {
 		Token:           strings.TrimSpace(r.FormValue("token")),
 		PaymentMethodID: strings.TrimSpace(r.FormValue("payment_method_id")),
 		TotalCents:      int(order.TotalCents),
+		UnitCents:       int(order.UnitPriceCents),
+		Quantity:        int(order.Quantity),
 		GivenName:       payer.givenName,
 		FamilyName:      payer.familyName,
 		Email:           payer.email,
+		RegisteredAt:    order.CreatedAt,
+		Member:          offer.FixedChurch != "",
 	})
+	if result.Err != nil {
+		logger.Error("charge order %s: %v", id, result.Err)
+	} else if chargeFailed(result) {
+		logger.Error("charge order %s failed: kind=%s status=%s detail=%s", id, result.Kind, result.Status, result.StatusDetail)
+	}
 
 	if chargeFailed(result) {
 		if err := rejectReserved(ctx, order.ID, now); err != nil {
@@ -124,6 +145,7 @@ func handleRegisterPay(w http.ResponseWriter, r *http.Request) {
 		}
 		fresh, err := newSecret()
 		if err != nil {
+			logger.Error("pay checkout key: %v", err)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
@@ -151,6 +173,7 @@ func renderExistingOrder(w http.ResponseWriter, r *http.Request, order sqlc.Orde
 	if order.Status == "rejected" {
 		fresh, err := newSecret()
 		if err != nil {
+			logger.Error("pay checkout key: %v", err)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
@@ -176,13 +199,16 @@ func renderPayPanel(w http.ResponseWriter, r *http.Request, view register.PanelV
 			custom = helpers.HTMXError{Code: "ERR_FORM_ERROR", Message: "Errors handled by form", Status: status}
 		}
 		if err := helpers.RenderComponent(w, r, register.CheckoutPanel(view), custom); err != nil {
+			logger.Error("render pay panel: %v", err)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	_ = register.CheckoutPanel(view).Render(r.Context(), w)
+	if err := register.CheckoutPanel(view).Render(r.Context(), w); err != nil {
+		logger.Error("render pay panel: %v", err)
+	}
 }
 
 type payerInput struct {
@@ -242,14 +268,14 @@ func reserveOrder(ctx context.Context, checkoutKey string, payer payerInput, now
 	var order sqlc.Order
 	err := state.db.InTx(ctx, func(q *sqlc.Queries) error {
 		if err := ExpireStale(ctx, q, now); err != nil {
-			return err
+			return fmt.Errorf("expire stale: %w", err)
 		}
 		if !SalesOpen(now) {
 			return &reserveErr{kind: "sales_closed"}
 		}
 		held, err := q.CountTickets(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("count tickets: %w", err)
 		}
 		left := remainingSeats(held)
 		if left < payer.qty {
@@ -282,8 +308,9 @@ func reserveOrder(ctx context.Context, checkoutKey string, payer payerInput, now
 				if getErr == nil {
 					return &reserveErr{kind: "duplicate", order: winner}
 				}
+				return fmt.Errorf("reserve duplicate lookup: %w", getErr)
 			}
-			return err
+			return fmt.Errorf("insert order: %w", err)
 		}
 		for i := 0; i < payer.qty; i++ {
 			if _, err := q.InsertTicket(ctx, sqlc.InsertTicketParams{
@@ -291,7 +318,7 @@ func reserveOrder(ctx context.Context, checkoutKey string, payer payerInput, now
 				Token:   sql.NullString{},
 				Status:  "reserved",
 			}); err != nil {
-				return err
+				return fmt.Errorf("insert ticket: %w", err)
 			}
 		}
 		order = row
@@ -303,12 +330,15 @@ func reserveOrder(ctx context.Context, checkoutKey string, payer payerInput, now
 func rejectReserved(ctx context.Context, orderID int64, now time.Time) error {
 	return state.db.InTx(ctx, func(q *sqlc.Queries) error {
 		if err := q.DeleteReservedTicketsByOrder(ctx, orderID); err != nil {
-			return err
+			return fmt.Errorf("delete reserved tickets: %w", err)
 		}
-		return q.RejectPendingOrder(ctx, sqlc.RejectPendingOrderParams{
+		if err := q.RejectPendingOrder(ctx, sqlc.RejectPendingOrderParams{
 			UpdatedAt: sqliteNow(now),
 			ID:        orderID,
-		})
+		}); err != nil {
+			return fmt.Errorf("reject pending order: %w", err)
+		}
+		return nil
 	})
 }
 
@@ -324,6 +354,7 @@ func handleRegisterStatus(w http.ResponseWriter, r *http.Request) {
 	now := state.now()
 	ctx := r.Context()
 	if state.db == nil {
+		logger.Error("status: database is not configured")
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -337,11 +368,17 @@ func handleRegisterStatus(w http.ResponseWriter, r *http.Request) {
 
 	token := strings.TrimSpace(r.URL.Query().Get("poll_token"))
 	if token == "" {
+		logger.Error("status: poll token is required")
 		renderPayPanel(w, r, register.PanelView{Message: msgUnknownPay}, http.StatusNotFound)
 		return
 	}
 	order, err := state.db.Queries.GetOrderByPollToken(ctx, token)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			logger.Error("status: order not found")
+		} else {
+			logger.Error("status order: %v", err)
+		}
 		renderPayPanel(w, r, register.PanelView{Message: msgUnknownPay}, http.StatusNotFound)
 		return
 	}

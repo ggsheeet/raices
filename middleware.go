@@ -133,6 +133,7 @@ func contentType(next http.Handler) http.Handler {
 		case err == nil && (media == "application/x-www-form-urlencoded" || media == "multipart/form-data" || media == "application/json"):
 			next.ServeHTTP(w, r)
 		default:
+			logger.Error("request: unsupported content type %q", r.Header.Get("Content-Type"))
 			http.Error(w, "unsupported content type", http.StatusUnsupportedMediaType)
 		}
 	})
@@ -143,6 +144,7 @@ var requestLimiter = newLimiter(20, 40)
 func rateLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !requestLimiter.allow(clientIP(r)) {
+			logger.Error("request: too many requests from %s", clientIP(r))
 			http.Error(w, "too many requests", http.StatusTooManyRequests)
 			return
 		}

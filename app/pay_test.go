@@ -556,8 +556,9 @@ func TestFormatCentsViaChargeAmount(t *testing.T) {
 	if len(charger.calls) != 1 {
 		t.Fatalf("calls %d", len(charger.calls))
 	}
-	if charger.calls[0].TotalCents != 50000 {
-		t.Fatalf("total %d", charger.calls[0].TotalCents)
+	call := charger.calls[0]
+	if call.TotalCents != 50000 || call.UnitCents != 25000 || call.Quantity != 2 || call.RegisteredAt == "" {
+		t.Fatalf("charge = %+v", call)
 	}
 }
 
@@ -707,7 +708,7 @@ func TestEmanuelPayForcesChurchAndMemberPrice(t *testing.T) {
 	if strings.Contains(body, "/register/pay") {
 		t.Fatalf("retry left member checkout: %s", body)
 	}
-	if len(charger.calls) != 1 || charger.calls[0].TotalCents != 20000 {
+	if len(charger.calls) != 1 || charger.calls[0].TotalCents != 20000 || !charger.calls[0].Member {
 		t.Fatalf("charge %+v", charger.calls)
 	}
 	order, err := db.Queries.GetOrderByCheckoutKey(context.Background(), "ck-member")
@@ -731,7 +732,7 @@ func TestPublicPayKeepsTypedChurchAndPublicPrice(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
 	}
-	if len(charger.calls) != 1 || charger.calls[0].TotalCents != 50000 {
+	if len(charger.calls) != 1 || charger.calls[0].TotalCents != 50000 || charger.calls[0].Member {
 		t.Fatalf("charge %+v", charger.calls)
 	}
 	order, err := db.Queries.GetOrderByCheckoutKey(context.Background(), "ck-public-church")

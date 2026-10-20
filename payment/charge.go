@@ -7,8 +7,12 @@ import (
 
 type Charge struct {
 	LocalOrderID, IdempotencyKey, Token, PaymentMethodID string
-	TotalCents                                           int
+	TotalCents, UnitCents, Quantity                      int
+	Member                                               bool
 	GivenName, FamilyName, Email                         string
+	// RegisteredAt is when this buyer first appeared on the site.
+	// Checkout has no accounts, so that moment is the order row.
+	RegisteredAt string
 }
 
 type Kind string
@@ -22,6 +26,9 @@ const (
 type Result struct {
 	Kind                                          Kind
 	MPOrderID, Status, StatusDetail, ChallengeURL string
+	// Err is the provider or transport failure behind this result.
+	// Handlers log it; Kind still decides how checkout proceeds.
+	Err error
 }
 
 type Charger interface {

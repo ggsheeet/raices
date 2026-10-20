@@ -16,17 +16,20 @@ import (
 
 func handleRegisterConfirmed(w http.ResponseWriter, r *http.Request) {
 	if state.db == nil {
+		logger.Error("confirmed: database is not configured")
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 	token := strings.TrimSpace(r.URL.Query().Get("poll_token"))
 	if token == "" {
+		logger.Error("confirmed: poll token is required")
 		renderReceipt(w, r, missingReceipt())
 		return
 	}
 	order, err := state.db.Queries.GetOrderByPollToken(r.Context(), token)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			logger.Error("confirmed: order not found")
 			renderReceipt(w, r, missingReceipt())
 			return
 		}

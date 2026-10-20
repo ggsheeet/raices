@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -28,17 +29,21 @@ func Apply(ctx context.Context, q *sqlc.Queries, now time.Time, order sqlc.Order
 func applySuccess(ctx context.Context, q *sqlc.Queries, now time.Time, order sqlc.Order, totalAmount, currency string) (bool, error) {
 	reserved, err := q.ListReservedTicketsByOrder(ctx, order.ID)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("list reserved tickets: %w", err)
 	}
 	if !amountMatches(totalAmount, currency, order.TotalCents) {
-		return false, setPaid(ctx, q, now, order.ID, "unfulfilled")
+		logger.Error("apply order %d: payment amount or currency does not match", order.ID)
+		if err := setPaid(ctx, q, now, order.ID, "unfulfilled"); err != nil {
+			return false, fmt.Errorf("mark paid: %w", err)
+		}
+		return false, nil
 	}
 	if len(reserved) > 0 {
 		if err := issueReserved(ctx, q, now, reserved); err != nil {
 			return false, err
 		}
 		if err := setPaid(ctx, q, now, order.ID, "fulfilled"); err != nil {
-			return false, err
+			return false, fmt.Errorf("mark paid: %w", err)
 		}
 		return true, nil
 	}
@@ -49,10 +54,14 @@ func applySuccess(ctx context.Context, q *sqlc.Queries, now time.Time, order sql
 
 	held, err := q.CountTickets(ctx)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("count tickets: %w", err)
 	}
 	if remainingSeats(held) < int(order.Quantity) {
-		return false, setPaid(ctx, q, now, order.ID, "unfulfilled")
+		logger.Error("apply order %d: not enough seats to fulfill", order.ID)
+		if err := setPaid(ctx, q, now, order.ID, "unfulfilled"); err != nil {
+			return false, fmt.Errorf("mark paid: %w", err)
+		}
+		return false, nil
 	}
 	for i := int64(0); i < order.Quantity; i++ {
 		token, err := newSecret()
@@ -64,11 +73,11 @@ func applySuccess(ctx context.Context, q *sqlc.Queries, now time.Time, order sql
 			Token:   sql.NullString{String: token, Valid: true},
 			Status:  "issued",
 		}); err != nil {
-			return false, err
+			return false, fmt.Errorf("insert ticket: %w", err)
 		}
 	}
 	if err := setPaid(ctx, q, now, order.ID, "fulfilled"); err != nil {
-		return false, err
+		return false, fmt.Errorf("mark paid: %w", err)
 	}
 	return true, nil
 }
@@ -77,17 +86,23 @@ func applyFailure(ctx context.Context, q *sqlc.Queries, now time.Time, order sql
 	switch order.Status {
 	case "pending_payment":
 		if err := q.DeleteReservedTicketsByOrder(ctx, order.ID); err != nil {
-			return err
+			return fmt.Errorf("delete reserved tickets: %w", err)
 		}
-		return q.RejectPendingOrder(ctx, sqlc.RejectPendingOrderParams{
+		if err := q.RejectPendingOrder(ctx, sqlc.RejectPendingOrderParams{
 			UpdatedAt: sqliteNow(now),
 			ID:        order.ID,
-		})
+		}); err != nil {
+			return fmt.Errorf("reject pending order: %w", err)
+		}
+		return nil
 	case "expired":
-		return q.RejectExpiredOrder(ctx, sqlc.RejectExpiredOrderParams{
+		if err := q.RejectExpiredOrder(ctx, sqlc.RejectExpiredOrderParams{
 			UpdatedAt: sqliteNow(now),
 			ID:        order.ID,
-		})
+		}); err != nil {
+			return fmt.Errorf("reject expired order: %w", err)
+		}
+		return nil
 	default:
 		return nil
 	}
@@ -98,14 +113,14 @@ func issueReserved(ctx context.Context, q *sqlc.Queries, now time.Time, tickets 
 	for _, tk := range tickets {
 		token, err := newSecret()
 		if err != nil {
-			return err
+			return fmt.Errorf("ticket token: %w", err)
 		}
 		if err := q.IssueReservedTicket(ctx, sqlc.IssueReservedTicketParams{
 			Token:     sql.NullString{String: token, Valid: true},
 			UpdatedAt: stamp,
 			ID:        tk.ID,
 		}); err != nil {
-			return err
+			return fmt.Errorf("issue reserved ticket: %w", err)
 		}
 	}
 	return nil

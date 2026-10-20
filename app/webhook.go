@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -27,12 +28,17 @@ type webhookPayload struct {
 func handleMercadoPagoWebhook(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
+		logger.Error("webhook read body: %v", err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 
 	var payload webhookPayload
-	_ = json.Unmarshal(body, &payload)
+	if len(strings.TrimSpace(string(body))) > 0 {
+		if err := json.Unmarshal(body, &payload); err != nil {
+			logger.Error("webhook decode: %v", err)
+		}
+	}
 
 	dataID := strings.TrimSpace(r.URL.Query().Get("data.id"))
 	if dataID == "" {
@@ -45,6 +51,7 @@ func handleMercadoPagoWebhook(w http.ResponseWriter, r *http.Request) {
 	requestID := strings.TrimSpace(r.Header.Get("x-request-id"))
 
 	if !validWebhookSignature(r.Header.Get("x-signature"), dataID, requestID, env.MPWebhookSecret) {
+		logger.Error("webhook: invalid signature")
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
@@ -60,14 +67,20 @@ func handleMercadoPagoWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if state.db == nil || state.fetcher == nil {
+		logger.Error("webhook: database or fetcher is not configured")
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 
 	ctx := r.Context()
 	fetched, err := state.fetcher.Get(ctx, dataID)
-	if err != nil || fetched == nil {
+	if err != nil {
 		logger.Error("mercadopago get %s: %v", dataID, err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	if fetched == nil {
+		logger.Error("mercadopago get %s: empty response", dataID)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -95,14 +108,15 @@ func handleMercadoPagoWebhook(w http.ResponseWriter, r *http.Request) {
 	var moved bool
 	if err := state.db.InTx(ctx, func(q *sqlc.Queries) error {
 		if err := ExpireStale(ctx, q, now); err != nil {
-			return err
+			return fmt.Errorf("expire stale: %w", err)
 		}
 		row, err := q.GetOrderByID(ctx, order.ID)
 		if err != nil {
-			return err
+			return fmt.Errorf("reload order: %w", err)
 		}
-		moved, err = Apply(ctx, q, now, row, success, fetched.TotalAmount, fetched.Currency)
-		return err
+		var applyErr error
+		moved, applyErr = Apply(ctx, q, now, row, success, fetched.TotalAmount, fetched.Currency)
+		return applyErr
 	}); err != nil {
 		logger.Error("webhook apply: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
