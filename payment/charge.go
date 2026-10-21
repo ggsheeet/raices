@@ -8,7 +8,7 @@ import (
 type Charge struct {
 	LocalOrderID, IdempotencyKey, Token string
 	// PaymentMethodID and PaymentType come from the card BIN lookup.
-	// Orders only accepts visa, master, and amex; debit bins use other ids.
+	// Credit ids are visa, master, and amex. Debit ids are debvisa and debmaster.
 	PaymentMethodID, PaymentType    string
 	TotalCents, UnitCents, Quantity int
 	Member                          bool

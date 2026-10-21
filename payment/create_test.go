@@ -83,11 +83,12 @@ func TestCreateNormalizesPaymentMethod(t *testing.T) {
 	cases := []struct {
 		id, kind, wantID, wantType string
 	}{
-		{id: "debvisa", kind: "debit_card", wantID: "visa", wantType: "debit_card"},
-		{id: "debmaster", wantID: "master", wantType: "debit_card"},
-		{id: "maestro", wantID: "master", wantType: "debit_card"},
+		{id: "debvisa", kind: "debit_card", wantID: "debvisa", wantType: "debit_card"},
+		{id: "debmaster", wantID: "debmaster", wantType: "debit_card"},
+		{id: "maestro", wantID: "debmaster", wantType: "debit_card"},
 		{id: "visa", wantID: "visa", wantType: "credit_card"},
-		{id: "Visa", kind: "debit_card", wantID: "visa", wantType: "debit_card"},
+		{id: "Visa", kind: "debit_card", wantID: "debvisa", wantType: "debit_card"},
+		{id: "master", kind: "debit_card", wantID: "debmaster", wantType: "debit_card"},
 		{id: "amex", kind: "credit_card", wantID: "amex", wantType: "credit_card"},
 		{id: "master", kind: "prepaid_card", wantID: "master", wantType: "credit_card"},
 	}
