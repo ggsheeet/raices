@@ -27,11 +27,68 @@
     return document.querySelector('input[name="payment_method_id"]');
   }
 
-  function setPaymentMethodID(id) {
-    var input = paymentMethodInput();
-    if (input) {
-      input.value = id || "";
+  function paymentTypeInput() {
+    return document.querySelector('input[name="payment_type"]');
+  }
+
+  function setPaymentMethod(pm) {
+    var idInput = paymentMethodInput();
+    var typeInput = paymentTypeInput();
+    if (idInput) {
+      idInput.value = (pm && pm.id) || "";
     }
+    if (typeInput) {
+      typeInput.value = (pm && pm.payment_type_id) || "";
+    }
+  }
+
+  function methodList(res) {
+    if (!res) {
+      return [];
+    }
+    if (Array.isArray(res)) {
+      return res;
+    }
+    if (Array.isArray(res.results)) {
+      return res.results;
+    }
+    return [];
+  }
+
+  function cardMethod(list) {
+    var types = { credit_card: true, debit_card: true, prepaid_card: true };
+    for (var i = 0; i < list.length; i++) {
+      var pm = list[i];
+      if (pm && types[pm.payment_type_id]) {
+        return pm;
+      }
+    }
+    return null;
+  }
+
+  var lastBin = "";
+  var lookupGen = 0;
+
+  function lookupMethod(sdk, bin) {
+    var gen = ++lookupGen;
+    if (!bin || !sdk || typeof sdk.getPaymentMethods !== "function") {
+      setPaymentMethod(null);
+      return Promise.resolve();
+    }
+    return sdk
+      .getPaymentMethods({ bin: bin })
+      .then(function (res) {
+        if (gen !== lookupGen) {
+          return;
+        }
+        setPaymentMethod(cardMethod(methodList(res)));
+      })
+      .catch(function () {
+        if (gen !== lookupGen) {
+          return;
+        }
+        setPaymentMethod(null);
+      });
   }
 
   function secureHosts() {
@@ -91,22 +148,9 @@
     if (typeof cardNumber.on === "function") {
       cardNumber.on("binChange", function (data) {
         var bin = data && data.bin;
-        if (!bin) {
-          setPaymentMethodID("");
-          return;
-        }
-        if (typeof sdk.getPaymentMethods !== "function") {
-          return;
-        }
-        sdk
-          .getPaymentMethods({ bin: bin })
-          .then(function (res) {
-            var id = res && res.results && res.results[0] && res.results[0].id;
-            setPaymentMethodID(id || "");
-          })
-          .catch(function () {
-            setPaymentMethodID("");
-          });
+        lastBin = bin || "";
+        setPaymentMethod(null);
+        lookupMethod(sdk, lastBin);
       });
     }
     fields = {
@@ -139,15 +183,34 @@
     return form.querySelector('input[name="token"]');
   }
 
+  function requestBody(ctx) {
+    var body = ctx && ctx.request && ctx.request.body;
+    if (body && typeof body.set === "function") {
+      return body;
+    }
+    return null;
+  }
+
   function applyToken(form, ctx, id) {
     var input = tokenInput(form);
     if (input) {
       input.value = id;
     }
-    var body = ctx && ctx.request && ctx.request.body;
-    if (body && typeof body.set === "function") {
+    var body = requestBody(ctx);
+    if (body) {
       body.set("token", id);
     }
+  }
+
+  function applyPaymentMethod(ctx) {
+    var body = requestBody(ctx);
+    if (!body) {
+      return;
+    }
+    var idInput = paymentMethodInput();
+    var typeInput = paymentTypeInput();
+    body.set("payment_method_id", idInput ? idInput.value : "");
+    body.set("payment_type", typeInput ? typeInput.value : "");
   }
 
   function clearPayToken() {
@@ -176,11 +239,16 @@
     }
     var nameEl = document.getElementById("card_name");
     var cardholderName = nameEl ? nameEl.value : "";
+    var idInput = paymentMethodInput();
+    var pending = idInput && idInput.value ? Promise.resolve() : lookupMethod(sdk, lastBin);
     tokenizing = true;
-    sdk.fields
-      .createCardToken({ cardholderName: cardholderName })
+    pending
+      .then(function () {
+        return sdk.fields.createCardToken({ cardholderName: cardholderName });
+      })
       .then(function (result) {
         applyToken(form, event.detail.ctx, result.id);
+        applyPaymentMethod(event.detail.ctx);
         event.detail.issueRequest();
       })
       .finally(function () {

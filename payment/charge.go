@@ -6,10 +6,13 @@ import (
 )
 
 type Charge struct {
-	LocalOrderID, IdempotencyKey, Token, PaymentMethodID string
-	TotalCents, UnitCents, Quantity                      int
-	Member                                               bool
-	GivenName, FamilyName, Email                         string
+	LocalOrderID, IdempotencyKey, Token string
+	// PaymentMethodID and PaymentType come from the card BIN lookup.
+	// Orders only accepts visa, master, and amex; debit bins use other ids.
+	PaymentMethodID, PaymentType    string
+	TotalCents, UnitCents, Quantity int
+	Member                          bool
+	GivenName, FamilyName, Email    string
 	// RegisteredAt is when this buyer first appeared on the site.
 	// Checkout has no accounts, so that moment is the order row.
 	RegisteredAt string

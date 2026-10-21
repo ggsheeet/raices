@@ -117,11 +117,13 @@ func handleRegisterPay(w http.ResponseWriter, r *http.Request) {
 	chargeCtx, cancel := context.WithTimeout(ctx, chargeTimeout)
 	defer cancel()
 	id := strconv.FormatInt(order.ID, 10)
+	methodID := strings.TrimSpace(r.FormValue("payment_method_id"))
 	result := state.charger.Create(chargeCtx, payment.Charge{
 		LocalOrderID:    id,
 		IdempotencyKey:  checkoutKey,
 		Token:           strings.TrimSpace(r.FormValue("token")),
-		PaymentMethodID: strings.TrimSpace(r.FormValue("payment_method_id")),
+		PaymentMethodID: methodID,
+		PaymentType:     strings.TrimSpace(r.FormValue("payment_type")),
 		TotalCents:      int(order.TotalCents),
 		UnitCents:       int(order.UnitPriceCents),
 		Quantity:        int(order.Quantity),
@@ -132,7 +134,7 @@ func handleRegisterPay(w http.ResponseWriter, r *http.Request) {
 		Member:          offer.FixedChurch != "",
 	})
 	if result.Err != nil {
-		logger.Error("charge order %s: %v", id, result.Err)
+		logger.Error("charge order %s payment_method_id=%q: %v", id, methodID, result.Err)
 	} else if chargeFailed(result) {
 		logger.Error("charge order %s failed: kind=%s status=%s detail=%s", id, result.Kind, result.Status, result.StatusDetail)
 	}

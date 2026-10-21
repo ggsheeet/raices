@@ -40,14 +40,15 @@ func (c orderCharger) Create(ctx context.Context, charge Charge) Result {
 	}
 
 	amount := FormatCents(charge.TotalCents)
+	brand, kind := ordersPaymentMethod(charge.PaymentMethodID, charge.PaymentType)
 	method := &order.PaymentMethodRequest{
-		Type:                "credit_card",
+		Type:                kind,
 		Token:               charge.Token,
 		Installments:        1,
 		StatementDescriptor: statementDescriptor,
 	}
-	if charge.PaymentMethodID != "" {
-		method.ID = charge.PaymentMethodID
+	if brand != "" {
+		method.ID = brand
 	}
 
 	req := order.Request{
@@ -107,6 +108,27 @@ func (c orderCharger) Create(ctx context.Context, charge Charge) Result {
 	}
 
 	return Result{Kind: KindUnknown, Err: err}
+}
+
+// ordersPaymentMethod maps a BIN-lookup id onto the brand the Orders API accepts.
+// Lookup returns debvisa, debmaster, and maestro for debit cards. Orders rejects
+// those ids and only allows amex, master, and visa, with debit expressed as the type.
+func ordersPaymentMethod(rawID, rawType string) (string, string) {
+	id := strings.ToLower(strings.TrimSpace(rawID))
+	kind := strings.ToLower(strings.TrimSpace(rawType))
+	switch id {
+	case "debvisa":
+		id = "visa"
+		kind = "debit_card"
+	case "debmaster", "maestro":
+		id = "master"
+		kind = "debit_card"
+	}
+	if kind != "debit_card" {
+		// Prepaid Visa and Mastercard are charged as credit cards.
+		kind = "credit_card"
+	}
+	return id, kind
 }
 
 func lineItems(charge Charge) []order.ItemsRequest {

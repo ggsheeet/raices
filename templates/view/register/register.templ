@@ -255,6 +255,7 @@ templ PayForm(payPath string, checkoutKey string, errMsg string) {
 		<input type="hidden" name="token" value=""/>
 		<input type="hidden" name="checkout_key" value={ checkoutKey }/>
 		<input type="hidden" name="payment_method_id" value=""/>
+		<input type="hidden" name="payment_type" value=""/>
 		<div id="pay_error" role="alert" class="badge_message error text_sm">{ errMsg }</div>
 		<button type="submit" class="custom_cta" id="form_submit_btn">
 			<svg id="spinner" class="htmx-indicator spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-dasharray="28 22"></circle></svg>

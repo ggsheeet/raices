@@ -79,6 +79,35 @@ func TestCreateSendsQualityFields(t *testing.T) {
 	}
 }
 
+func TestCreateNormalizesPaymentMethod(t *testing.T) {
+	cases := []struct {
+		id, kind, wantID, wantType string
+	}{
+		{id: "debvisa", kind: "debit_card", wantID: "visa", wantType: "debit_card"},
+		{id: "debmaster", wantID: "master", wantType: "debit_card"},
+		{id: "maestro", wantID: "master", wantType: "debit_card"},
+		{id: "visa", wantID: "visa", wantType: "credit_card"},
+		{id: "Visa", kind: "debit_card", wantID: "visa", wantType: "debit_card"},
+		{id: "amex", kind: "credit_card", wantID: "amex", wantType: "credit_card"},
+		{id: "master", kind: "prepaid_card", wantID: "master", wantType: "credit_card"},
+	}
+	for _, tc := range cases {
+		fake := &fakeOrderClient{resp: &order.Response{ID: "mp-1", Status: "processed"}}
+		got := orderCharger{client: fake}.Create(context.Background(), Charge{
+			TotalCents:      25000,
+			PaymentMethodID: tc.id,
+			PaymentType:     tc.kind,
+		})
+		if got.Kind != KindOrder || got.Err != nil {
+			t.Fatalf("%s/%s: result = %+v", tc.id, tc.kind, got)
+		}
+		pm := fake.req.Transactions.Payments[0].PaymentMethod
+		if pm == nil || pm.ID != tc.wantID || pm.Type != tc.wantType || pm.Installments != 1 {
+			t.Fatalf("%s/%s: method = %+v", tc.id, tc.kind, pm)
+		}
+	}
+}
+
 func TestCreateSendsMemberItem(t *testing.T) {
 	fake := &fakeOrderClient{resp: &order.Response{ID: "mp-1", Status: "processed"}}
 	got := orderCharger{client: fake}.Create(context.Background(), Charge{
