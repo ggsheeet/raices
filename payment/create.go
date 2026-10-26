@@ -74,8 +74,7 @@ func (c orderCharger) Create(ctx context.Context, charge Charge) Result {
 			StatementDescriptor: statementDescriptor,
 			Online: &order.OnlineConfigRequest{
 				TransactionSecurity: &order.TransactionSecurityRequest{
-					Validation:     "on_fraud_risk",
-					LiabilityShift: "required",
+					Validation: "never",
 				},
 			},
 		},

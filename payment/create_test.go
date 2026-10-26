@@ -72,10 +72,14 @@ func TestCreateSendsQualityFields(t *testing.T) {
 		`"quantity":2`,
 		`"statement_descriptor":"RAICES"`,
 		`"payer.registration_date":"2026-10-19T16:38:00.000+00:00"`,
+		`"validation":"never"`,
 	} {
 		if !strings.Contains(raw, want) {
 			t.Fatalf("body missing %s: %s", want, raw)
 		}
+	}
+	if strings.Contains(raw, "on_fraud_risk") || strings.Contains(raw, "liability_shift") {
+		t.Fatalf("transaction security still enabled: %s", raw)
 	}
 }
 
